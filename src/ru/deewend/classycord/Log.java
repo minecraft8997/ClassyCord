@@ -17,8 +17,28 @@ public class Log {
     private static final DateFormat FORMAT =
             new SimpleDateFormat(ClassyCord.getInstance().getLogFormat());
 
+    public static String f(String fmt, Object... args) {
+        return String.format(fmt, args);
+    }
+
     public static void i(String message) {
         l(LOG_LEVEL_INFO, message, null);
+    }
+
+    public static void w(String message) {
+        l(LOG_LEVEL_WARN, message, null);
+    }
+
+    public static void w(String message, Throwable t) {
+        l(LOG_LEVEL_WARN, message, t);
+    }
+
+    public static void s(String message) {
+        l(LOG_LEVEL_SEVERE, message, null);
+    }
+
+    public static void s(String message, Throwable t) {
+        l(LOG_LEVEL_SEVERE, message, t);
     }
 
     public static void l(byte logLevel, String message) {

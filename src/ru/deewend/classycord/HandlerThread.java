@@ -1,8 +1,9 @@
 package ru.deewend.classycord;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class HandlerThread extends Thread {
@@ -14,7 +15,8 @@ public class HandlerThread extends Thread {
     private final List<SocketHolder> clientList;
 
     public HandlerThread() {
-        setName("HandlerThread");
+        setName("handler");
+        setDaemon(true);
 
         this.clientList = new ArrayList<>();
     }
@@ -30,84 +32,101 @@ public class HandlerThread extends Thread {
 
     private synchronized void tick() {
         int clientListSize = clientList.size();
-        for (int i = clientListSize - 1; i >= 0; i--) {
+        global: for (int i = clientListSize - 1; i >= 0; i--) {
             SocketHolder holder = clientList.get(i);
             long currentTimeMillis = System.currentTimeMillis();
             try {
-                if (currentTimeMillis - holder.getLastTestedIfAlive() >= 1500) {
-                    holder.getOutputStream().write(Utils.PING_PACKET);
-                    holder.getOutputStream().flush();
-                    holder.getServerOutputStream().write(Utils.PING_PACKET);
-                    holder.getServerOutputStream().flush();
-
-                    holder.setLastTestedIfAlive(currentTimeMillis);
-                }
-
-                int availableFromClient, availableFromServer;
-                if ((availableFromClient = holder.getInputStream().available()) > 0) {
-                    byte[] packet = new byte[availableFromClient];
-                    //noinspection ResultOfMethodCallIgnored
-                    holder.getInputStream().read(packet);
-                    holder.getServerOutputStream().write(packet);
-                    holder.getServerOutputStream().flush();
-                    holder.setLastReadTimestamp(currentTimeMillis);
-                } else {
-                    if (Utils.delta(holder.getLastReadTimestamp()) >= READ_TIMEOUT) {
-                        close(holder);
-
-                        continue;
-                    }
-                }
-
-                if ((availableFromServer = holder.getServerInputStream().available()) > 0) {
-                    byte[] packet = new byte[availableFromServer];
-                    //noinspection ResultOfMethodCallIgnored
-                    holder.getServerInputStream().read(packet);
-                    holder.getOutputStream().write(packet);
-                    holder.getOutputStream().flush();
-                    holder.setLastServerReadTimestamp(currentTimeMillis);
-
-                    /*
-                    int initialLength = packet.length;
-                    boolean needToSendGameTitle = false;
-
-                    int position = analyzeServerPacket(packet);
-                    if (position != -1) {
-                        initialLength = position;
-                        needToSendGameTitle = true;
-                    }
-
-                    holder.getOutputStream().write(packet, 0, initialLength);
-                    if (needToSendGameTitle) {
-                        inject(holder);
-
-                        if (!holder.thisIsMainMenu) {
-                            holder.thisIsMainMenu = true;
-                            holder.cachedOriginalMainMenuPacket = packet;
-                            holder.cachedMainMenuInjectPosition = initialLength;
-                        }
+                while (true) {
+                    int bytesCount = holder.getState().getExpectedClientPacketLength();
+                    InputStream clientInputStream = holder.getInputStream();
+                    // System.out.println("bf availbale");
+                    int available = clientInputStream.available();
+                    if (available >= bytesCount) {
+                        byte[] packet = new byte[(bytesCount == 1 ? available : bytesCount)];
+                        //noinspection ResultOfMethodCallIgnored
+                        clientInputStream.read(packet);
+                        handleIncomingDataFromClient(holder, packet);
+                        holder.setLastReadTimestamp(currentTimeMillis);
                     } else {
-                        if (holder.thisIsMainMenu) {
-                            holder.thisIsMainMenu = false;
-                            holder.cachedOriginalMainMenuPacket = null; // free memory
-                        }
-                    }
-                    if (initialLength < packet.length) {
-                        holder.outputStream.write(packet,
-                                initialLength, (packet.length - initialLength));
-                    }
-                    holder.outputStream.flush();
-                    holder.lastServerReadTimestamp = currentTimeMillis;
+                        if (Utils.delta(holder.getLastReadTimestamp()) >= READ_TIMEOUT) {
+                            close(holder, null);
 
-                     */
-                } else {
-                    if (Utils.delta(holder.getLastServerReadTimestamp()) >= READ_TIMEOUT) {
-                        close(holder);
+                            continue global;
+                        }
+
+                        break;
                     }
                 }
-            } catch (IOException e) {
-                close(holder);
+
+                while (true) {
+                    if (holder.getGameServer() == null) break;
+
+                    //System.out.println("It's not null, sending some data");
+                    int bytesCount = 1;
+                    InputStream serverInputStream = holder.getServerInputStream();
+                    int available = serverInputStream.available();
+                    if (available >= bytesCount) {
+                        byte[] packet = new byte[(bytesCount == 1 ? available : bytesCount)];
+                        //noinspection ResultOfMethodCallIgnored
+                        serverInputStream.read(packet);
+                        //System.out.println("Sending " + Arrays.toString(packet));
+                        holder.getOutputStream().write(packet);
+                        holder.getOutputStream().flush();
+                        holder.setLastServerReadTimestamp(currentTimeMillis);
+                    } else {
+                        if (Utils.delta(holder.getLastServerReadTimestamp()) >= READ_TIMEOUT) {
+                            close(holder, null);
+
+                            continue global;
+                        }
+
+                        break;
+                    }
+                }
+            } catch (IOException | SilentIOException e) {
+                close(holder, e);
             }
+        }
+    }
+
+    private static void handleIncomingDataFromClient(
+            SocketHolder holder, byte[] packet
+    ) throws IOException, SilentIOException {
+        ByteArrayInputStream stream0 = new ByteArrayInputStream(packet);
+        DataInputStream stream = new DataInputStream(stream0);
+
+        SocketHolder.State state = holder.getState();
+        if (!state.checkPacketId(stream)) {
+            throw new SilentIOException("Unexpected packetId");
+        }
+        if (state == SocketHolder.State.WAITING_FOR_PLAYER_IDENTIFICATION) {
+            int protocolVersion = stream.readUnsignedByte();
+            if (protocolVersion != Utils.PROTOCOL_VERSION) {
+                throw new SilentIOException("Unsupported protocol version");
+            }
+            String username = Utils.readMCString(stream);
+            if (!Utils.validateUsername(username)) {
+                throw new SilentIOException("Illegal username");
+            }
+            String verificationKey = Utils.readMCString(stream);
+            if (!Utils.authenticatePlayer(username, verificationKey)) {
+                throw new SilentIOException("Failed " +
+                        "to authenticate, try refreshing the server list");
+            }
+            holder.setUsername(username);
+            holder.setGameServer(ClassyCord.getInstance().getFirstServer());
+
+            int magic = stream.readUnsignedByte();
+            if (magic == Utils.MAGIC) {
+                holder.setState(SocketHolder.State
+                        .WAITING_FOR_SERVER_SUPPORTED_CPE_LIST);
+            } else {
+                holder.setState(SocketHolder.State.CONNECTED);
+            }
+        } else {
+            OutputStream serverOutputStream = holder.getServerOutputStream();
+            serverOutputStream.write(packet);
+            serverOutputStream.flush();
         }
     }
 
@@ -126,19 +145,33 @@ public class HandlerThread extends Thread {
                     "printing the stacktrace...");
             t.printStackTrace();
         } finally {
-            System.err.println("HandlerThread has died, terminating the tunnel...");
+            System.err.println("HandlerThread has died, terminating the proxy...");
 
             System.exit(-1);
         }
     }
 
-    private void close(SocketHolder holder) {
-        Utils.close(holder.getSocket());
+    private void close(SocketHolder holder, Throwable t) {
+        // if (t != null) t.printStackTrace();
+
+        String reason;
+        if (t instanceof SilentIOException) {
+            reason = t.getMessage();
+        } else {
+            reason = "A disconnect or timeout occurred in your connection";
+        }
+        // it will most likely mess up with other packets though
+        Utils.sendDisconnect(holder, reason);
+
+        Socket clientSocket = holder.getSocket();
+        Utils.close(clientSocket);
         Utils.close(holder.getServerSocket());
         synchronized (this) {
             clientList.remove(holder);
         }
+        String username = holder.getUsername();
 
-        // Utils.reportSomeoneHas("left", holder.socket, null);
+        Log.i(Utils.getAddress(clientSocket) +
+                (username != null ? " (" + username + ")" : "") + " disconnected");
     }
 }

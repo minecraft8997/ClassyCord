@@ -3,10 +3,7 @@ package ru.deewend.classycord;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
+import java.util.*;
 
 public class ClassyCord {
     private static ClassyCord theClassyCord;
@@ -92,6 +89,7 @@ public class ClassyCord {
         props.setProperty("server1Name", "Freebuild");
         props.setProperty("server1Address", "127.0.0.1");
         props.setProperty("server1Port", "25566");
+        props.setProperty("firstServer", "Freebuild");
 
         File propertiesFile = new File("classycord.properties");
         if (propertiesFile.exists()) {
@@ -171,15 +169,13 @@ public class ClassyCord {
     public void start() throws IOException {
         try (ServerSocket listeningSocket = new ServerSocket(port)) {
             handlerThread = new HandlerThread();
-            handlerThread.setName("handler");
-            handlerThread.setDaemon(true);
             handlerThread.start();
             Log.i("Listening on port " + port + "...");
 
             while (true) {
                 beingRegistered = listeningSocket.accept();
                 beingRegistered.setTcpNoDelay(true);
-                Log.i(beingRegistered.getRemoteSocketAddress().toString() + " connected");
+                Log.i(Utils.getAddress(beingRegistered) + " connected");
 
                 boolean successfullyAdded;
                 try {
@@ -200,15 +196,13 @@ public class ClassyCord {
         return gameServerMap.get(name);
     }
 
-    private void reportErrorAndClose(boolean unknownError) throws IOException {
-        OutputStream stream = beingRegistered.getOutputStream();
-        stream.write(Utils.KICK_PACKET);
-        Utils.writeMCString(unknownError ?
-                        "Unknown error occurred" :
-                        "Servers are overloaded, try again in a minute",
-                stream);
-        stream.flush();
-        beingRegistered.close();
+    private void reportErrorAndClose(boolean ioError) {
+        Utils.sendDisconnect(beingRegistered, ioError ?
+                "An I/O error occurred" :
+                "The network is overloaded, try again in a minute");
+        Utils.close(beingRegistered);
+
+        Log.i(Utils.getAddress(beingRegistered) + " disconnected");
     }
 
     public int getPort() {

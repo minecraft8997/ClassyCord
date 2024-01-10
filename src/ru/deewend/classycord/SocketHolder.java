@@ -1,5 +1,6 @@
 package ru.deewend.classycord;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -7,6 +8,32 @@ import java.net.Socket;
 import java.util.Objects;
 
 public class SocketHolder {
+    public enum State {
+        WAITING_FOR_PLAYER_IDENTIFICATION(0x00, (1 + 1 + 64 + 64 + 1)),
+        WAITING_FOR_SERVER_SUPPORTED_CPE_LIST(-1 /* 0x10 */, 1),
+        CONNECTED(-1, 1);
+
+        private final int expectedPacketId;
+        private final int expectedClientPacketLength;
+
+        State(int expectedPacketId, int expectedClientPacketLength) {
+            this.expectedPacketId = expectedPacketId;
+            this.expectedClientPacketLength = expectedClientPacketLength;
+        }
+
+        public int getExpectedClientPacketLength() {
+            return expectedClientPacketLength;
+        }
+
+        public boolean checkPacketId(DataInputStream stream) throws IOException {
+            if (expectedPacketId == -1) return true; // no need to check pid at this state
+
+            int packetId = stream.readUnsignedByte();
+
+            return (expectedPacketId == packetId);
+        }
+    }
+
     private final long creationTimestamp;
     private long lastTestedIfAlive;
 
@@ -21,7 +48,8 @@ public class SocketHolder {
     private OutputStream serverOutputStream;
     private long lastServerReadTimestamp;
 
-    private boolean connecting;
+    private State state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
+    private String[][] CPE;
     private String username;
 
     public SocketHolder(Socket socket) throws IOException {
@@ -41,28 +69,27 @@ public class SocketHolder {
             throw new IllegalStateException("Cannot connect " +
                     "to a GameServer without knowing the player's username");
         }
-        if (this.gameServer == gameServer) {
-            Log.i("Reconnecting " + username + " to " + gameServer.getName());
-        }
+        Log.i((this.gameServer == gameServer ? "Rec" : "C") +
+                "onnecting " + username + " to " + gameServer.getName());
 
         this.gameServer = gameServer;
         Utils.close(serverSocket);
 
         // Proxy --> Game Server
         serverSocket = new Socket(gameServer.getAddress(), gameServer.getPort());
+        serverSocket.setTcpNoDelay(true);
         serverInputStream = serverSocket.getInputStream();
         serverOutputStream = serverSocket.getOutputStream();
         lastServerReadTimestamp = System.currentTimeMillis();
 
+        // writing PlayerIdentification packet
         serverOutputStream.write(Utils.PLAYER_IDENTIFICATION_PACKET);
         serverOutputStream.write(Utils.PROTOCOL_VERSION);
         Utils.writeMCString(username, serverOutputStream);
-        String mppass = Utils.md5(ClassyCord.getInstance().getSalt() + username);
-        Utils.writeMCString(mppass, serverOutputStream);
+        String verificationKey = Utils.md5(ClassyCord.getInstance().getSalt() + username);
+        Utils.writeMCString(verificationKey, serverOutputStream);
         serverOutputStream.write(Utils.MAGIC);
         serverOutputStream.flush();
-
-        connecting = true;
     }
 
     public long getCreationTimestamp() {
@@ -121,11 +148,21 @@ public class SocketHolder {
         this.lastServerReadTimestamp = lastServerReadTimestamp;
     }
 
+    public State getState() {
+        return state;
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
     public String getUsername() {
         return username;
     }
 
     public void setUsername(String username) {
         this.username = username;
+
+        Log.i(Utils.getAddress(socket) + " logged in as " + username);
     }
 }

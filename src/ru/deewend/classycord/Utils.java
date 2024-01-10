@@ -1,9 +1,8 @@
 package ru.deewend.classycord;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.math.BigInteger;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,7 +14,8 @@ public class Utils {
     public static final int PROTOCOL_VERSION = 0x07;
     public static final int MAGIC = 0x42;
     public static final int PING_PACKET = 0x01;
-    public static final int KICK_PACKET = 0xFF;
+    public static final int KICK_PACKET = 0x0E;
+    public static final int PROTOCOL_STRING_LENGTH = 64;
 
     private Utils() {
     }
@@ -30,17 +30,110 @@ public class Utils {
         }
     }
 
-    public static void writeMCString(String s, OutputStream to) throws IOException {
+    public static void sendDisconnect(Socket socket, String reason) {
+        if (socket == null) return;
+
+        try {
+            sendDisconnect(socket.getOutputStream(), reason);
+        } catch (IOException ignored) {
+            /* Ignoring this. */
+        }
+    }
+    
+    public static void sendDisconnect(SocketHolder holder, String reason) {
+        if (holder == null) return;
+
+        sendDisconnect(holder.getOutputStream(), reason);
+    }
+
+    public static void sendDisconnect(OutputStream dst, String reason) {
+        if (dst == null) return;
+
+        // Proxy --> Client
+        try {
+            dst.write(KICK_PACKET);
+            writeMCString(reason, dst);
+            dst.flush();
+        } catch (IOException ignored) {
+            /* Ignoring this. */
+        }
+    }
+
+    public static String getAddress(Socket socket) {
+        return socket.getRemoteSocketAddress().toString();
+    }
+
+    public static void writeMCString(String s, OutputStream dst) throws IOException {
         byte[] bytes = s.getBytes("Cp437");
-        if (bytes.length > 64) {
-            writeMCString("<the string is too long, hashcode=" + s.hashCode() + ">", to);
+        if (bytes.length > PROTOCOL_STRING_LENGTH) {
+            writeMCString("<the string is too long, hashcode=" + s.hashCode() + ">", dst);
 
             return;
         }
-        byte[] padding = new byte[64 - bytes.length];
+        byte[] padding = new byte[PROTOCOL_STRING_LENGTH - bytes.length];
         Arrays.fill(padding, (byte) 0x20);
-        to.write(bytes);
-        to.write(padding);
+        dst.write(bytes);
+        dst.write(padding);
+    }
+
+    public static String readMCString(DataInputStream src) throws IOException {
+        byte[] buffer = new byte[PROTOCOL_STRING_LENGTH];
+        src.readFully(buffer);
+
+        int end = -1;
+        for (int i = PROTOCOL_STRING_LENGTH - 1; i >= 0; i--) {
+            if (buffer[i] != 0x20) {
+                end = i + 1;
+
+                break;
+            }
+        }
+        if (end == -1) return "";
+
+        byte[] result = new byte[end];
+        System.arraycopy(buffer, 0, result, 0, result.length);
+
+        return new String(result);
+    }
+
+    public static boolean validateUsername(String username) {
+        if (username == null) {
+            return false; // wut?
+        }
+        if (username.length() < 2 || username.length() > 16) {
+            return false; // too short and too large nicknames are not allowed
+        }
+        for (int i = 0; i < username.length(); i++) {
+            char current = username.charAt(i);
+            if (current == '_' || current == '.') {
+                continue; // this is allowed
+            }
+            if (current >= '0' && current <= '9') {
+                continue; // numbers are allowed too
+            }
+            if ((current >= 'a' && current <= 'z') || (current >= 'A' && current <= 'Z')) {
+                continue; // characters from the Latin alphabet are allowed, of course
+            }
+
+            // we have encouraged an unknown character
+            // this username has failed our validation
+            return false;
+        }
+
+        // we haven't noticed anything suspicious
+        // OK!
+        return true;
+    }
+
+    public static boolean authenticatePlayer(String username, String verificationKey) {
+        if (!ClassyCord.getInstance().isOnlineMode()) return true;
+
+        String salt = ClassyCord.getInstance().getSalt();
+        String hash = md5(salt + username);
+
+        return verificationKey.equals(hash) ||
+                verificationKey.equals("0" + hash) ||
+                verificationKey.equals("00" + hash);
     }
 
     public static String md5(String str) {

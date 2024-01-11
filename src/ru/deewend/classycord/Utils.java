@@ -10,11 +10,13 @@ import java.util.Arrays;
 import java.util.UUID;
 
 public class Utils {
-    public static final int PLAYER_IDENTIFICATION_PACKET = 0x00;
+    public static final int SIDE_IDENTIFICATION_PACKET = 0x00;
     public static final int PROTOCOL_VERSION = 0x07;
     public static final int MAGIC = 0x42;
     public static final int PING_PACKET = 0x01;
-    public static final int KICK_PACKET = 0x0E;
+    public static final int DISCONNECT_PACKET = 0x0E;
+    public static final int EXT_INFO_PACKET = 0x10;
+    public static final int EXT_ENTRY_PACKET = 0x11;
     public static final int PROTOCOL_STRING_LENGTH = 64;
 
     private Utils() {
@@ -51,7 +53,7 @@ public class Utils {
 
         // Proxy --> Client
         try {
-            dst.write(KICK_PACKET);
+            dst.write(DISCONNECT_PACKET);
             writeMCString(reason, dst);
             dst.flush();
         } catch (IOException ignored) {

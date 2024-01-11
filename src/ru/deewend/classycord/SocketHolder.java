@@ -10,14 +10,28 @@ import java.util.Objects;
 public class SocketHolder {
     public enum State {
         WAITING_FOR_PLAYER_IDENTIFICATION(0x00, (1 + 1 + 64 + 64 + 1)),
-        WAITING_FOR_SERVER_SUPPORTED_CPE_LIST(-1 /* 0x10 */, 1),
-        CONNECTED(-1, 1);
+        /*
+         * We have to separate a single state between two parts, because
+         * theoretically we can just receive a Disconnect packet (65 bytes)
+         * instead of ExtInfo (67 bytes). If we'll be waiting for exactly 67 bytes,
+         * this may lead to a freeze.
+         *
+         * Thus, we'll be waiting for at least 65 bytes at first time.
+         */
+        WAITING_FOR_EXT_INFO_PT_1(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_EXT_INFO_PT_2(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_ALL_EXT_ENTRIES(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        CONNECTED(ANY_PACKET_ID, ANY_PACKET_LENGTH);
 
-        private final int expectedPacketId;
+        private final int expectedClientPacketId;
         private final int expectedClientPacketLength;
 
-        State(int expectedPacketId, int expectedClientPacketLength) {
-            this.expectedPacketId = expectedPacketId;
+        State(int expectedClientPacketId, int expectedClientPacketLength) {
+            if (expectedClientPacketLength < 1) {
+                throw new IllegalArgumentException("Too low expectedClientPacketLength");
+            }
+
+            this.expectedClientPacketId = expectedClientPacketId;
             this.expectedClientPacketLength = expectedClientPacketLength;
         }
 
@@ -25,14 +39,17 @@ public class SocketHolder {
             return expectedClientPacketLength;
         }
 
-        public boolean checkPacketId(DataInputStream stream) throws IOException {
-            if (expectedPacketId == -1) return true; // no need to check pid at this state
+        public boolean checkClientPacketId(DataInputStream stream) throws IOException {
+            if (expectedClientPacketId == ANY_PACKET_ID) return true;
 
             int packetId = stream.readUnsignedByte();
 
-            return (expectedPacketId == packetId);
+            return (expectedClientPacketId == packetId);
         }
     }
+
+    public static final int ANY_PACKET_ID = -1;
+    public static final int ANY_PACKET_LENGTH = 1;
 
     private final long creationTimestamp;
     private long lastTestedIfAlive;
@@ -49,7 +66,9 @@ public class SocketHolder {
     private long lastServerReadTimestamp;
 
     private State state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
-    private String[][] CPE;
+    private boolean supportsCPE;
+    private short expectedExtEntryCount;
+    private Object[][] CPEArrayConnectionWasInitializedWith;
     private String username;
 
     public SocketHolder(Socket socket) throws IOException {
@@ -83,13 +102,22 @@ public class SocketHolder {
         lastServerReadTimestamp = System.currentTimeMillis();
 
         // writing PlayerIdentification packet
-        serverOutputStream.write(Utils.PLAYER_IDENTIFICATION_PACKET);
+        serverOutputStream.write(Utils.SIDE_IDENTIFICATION_PACKET);
         serverOutputStream.write(Utils.PROTOCOL_VERSION);
         Utils.writeMCString(username, serverOutputStream);
         String verificationKey = Utils.md5(ClassyCord.getInstance().getSalt() + username);
         Utils.writeMCString(verificationKey, serverOutputStream);
-        serverOutputStream.write(Utils.MAGIC);
+        serverOutputStream.write(supportsCPE ? Utils.MAGIC : 0x00);
         serverOutputStream.flush();
+    }
+
+    public int getExpectedServerPacketLength() {
+        switch (state) {
+            case WAITING_FOR_EXT_INFO_PT_1: return 65;
+            case WAITING_FOR_EXT_INFO_PT_2: return 2; /* only one short is remaining */
+            case WAITING_FOR_ALL_EXT_ENTRIES: return expectedExtEntryCount * 69;
+            default: return ANY_PACKET_LENGTH;
+        }
     }
 
     public long getCreationTimestamp() {
@@ -154,6 +182,30 @@ public class SocketHolder {
 
     public void setState(State state) {
         this.state = state;
+    }
+
+    public boolean doesSupportCPE() {
+        return supportsCPE;
+    }
+
+    public void setSupportsCPE(boolean supportsCPE) {
+        this.supportsCPE = supportsCPE;
+    }
+
+    public short getExpectedExtEntryCount() {
+        return expectedExtEntryCount;
+    }
+
+    public void setExpectedExtEntryCount(short expectedExtEntryCount) {
+        this.expectedExtEntryCount = expectedExtEntryCount;
+    }
+
+    public Object[][] getCPEArrayConnectionWasInitializedWith() {
+        return CPEArrayConnectionWasInitializedWith;
+    }
+
+    public void setCPEArrayConnectionWasInitializedWith(Object[][] CPEArray) {
+        this.CPEArrayConnectionWasInitializedWith = CPEArray;
     }
 
     public String getUsername() {

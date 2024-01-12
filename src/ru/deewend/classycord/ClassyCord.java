@@ -15,6 +15,7 @@ public class ClassyCord {
     private final String logFormat;
     private final boolean saveLogsOnDisk;
     private final String logFileNameFormat;
+    private final int minTicksToWaitBeforeReconnecting;
     private final GameServer firstServer;
     private final Map<String, GameServer> gameServerMap = new HashMap<>();
     @SuppressWarnings("FieldCanBeLocal")
@@ -29,6 +30,7 @@ public class ClassyCord {
             String logFormat,
             boolean saveLogsOnDisk,
             String logFileNameFormat,
+            int minTicksToWaitBeforeReconnecting,
             GameServer firstServer,
             GameServer... gameServers
     ) {
@@ -57,6 +59,7 @@ public class ClassyCord {
         this.logFormat = logFormat;
         this.saveLogsOnDisk = saveLogsOnDisk;
         this.logFileNameFormat = logFileNameFormat;
+        this.minTicksToWaitBeforeReconnecting = minTicksToWaitBeforeReconnecting;
 
         this.firstServer = firstServer;
         for (GameServer gameServer : gameServers) {
@@ -85,6 +88,7 @@ public class ClassyCord {
         props.setProperty("logFormat", "[HH:mm:ss dd.MM.yyyy] ");
         props.setProperty("saveLogsOnDisk", "true");
         props.setProperty("logFileNameFormat", "dd-MM-yyyy-logs.txt");
+        props.setProperty("minTicksToWaitBeforeReconnecting", "2");
         props.setProperty("serverCount", "1");
         props.setProperty("server1Name", "Freebuild");
         props.setProperty("server1Address", "127.0.0.1");
@@ -114,6 +118,8 @@ public class ClassyCord {
         boolean saveLogsOnDisk = Boolean
                 .parseBoolean(props.getProperty("saveLogsOnDisk"));
         String logFileNameFormat = props.getProperty("logFileNameFormat");
+        int minTicksToWaitBeforeReconnecting = Integer.parseInt(
+                props.getProperty("minTicksToWaitBeforeReconnecting"));
 
         int port = Integer.parseInt(props.getProperty("port"));
         String salt = props.getProperty("salt");
@@ -156,6 +162,7 @@ public class ClassyCord {
                 logFormat,
                 saveLogsOnDisk,
                 logFileNameFormat,
+                minTicksToWaitBeforeReconnecting,
                 firstServer,
                 gameServers
         )).start();
@@ -233,6 +240,10 @@ public class ClassyCord {
 
     public String getLogFileNameFormat() {
         return logFileNameFormat;
+    }
+
+    public int getMinTicksToWaitBeforeReconnecting() {
+        return minTicksToWaitBeforeReconnecting;
     }
 
     public GameServer getFirstServer() {

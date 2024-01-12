@@ -69,8 +69,18 @@ public class HandlerThread extends Thread {
                         //noinspection ResultOfMethodCallIgnored
                         serverInputStream.read(packet);
                         handleDataFromServer(holder, packet);
+                        holder.resetTicksNoNewDataFromServer();
                         holder.setLastServerReadTimestamp(currentTimeMillis);
                     } else {
+                        holder.incrementTicksNoNewDataFromServer();
+                        GameServer pendingGameServer = holder.getPendingGameServer();
+                        if (holder.getTicksNoNewDataFromServer() >= ClassyCord
+                                .getInstance().getMinTicksToWaitBeforeReconnecting() &&
+                                pendingGameServer != null
+                        ) {
+                            holder.setGameServer(pendingGameServer);
+                            holder.setPendingGameServer(null);
+                        }
                         if (Utils.delta(holder.getLastServerReadTimestamp()) >= READ_TIMEOUT) {
                             close(holder, null);
 

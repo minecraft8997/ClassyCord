@@ -40,7 +40,7 @@ public class AnalyzingStream extends OutputStream {
         currentPos++;
     }
 
-    private void handleMessage(String message) throws IOException {
+    private void handleMessage(String message) {
         message = message.toLowerCase();
 
         if (message.startsWith(EXPECTED_MESSAGE_START)) {
@@ -49,7 +49,7 @@ public class AnalyzingStream extends OutputStream {
             GameServer gameServer = ClassyCord.getInstance().getGameServer(serverName);
             if (gameServer == null || holder.getGameServer() == gameServer) return;
 
-            holder.setGameServer(gameServer);
+            holder.setPendingGameServer(gameServer);
         }
     }
 }

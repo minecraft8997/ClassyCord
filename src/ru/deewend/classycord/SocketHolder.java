@@ -71,6 +71,8 @@ public class SocketHolder {
     private short expectedExtEntryCount;
     private Object[][] CPEArrayConnectionWasInitializedWith;
     private String username;
+    private int ticksNoNewDataFromServer;
+    private GameServer pendingGameServer;
 
     public SocketHolder(Socket socket) throws IOException {
         this.creationTimestamp = System.currentTimeMillis();
@@ -224,5 +226,25 @@ public class SocketHolder {
         this.username = username;
 
         Log.i(Utils.getAddress(socket) + " logged in as " + username);
+    }
+
+    public int getTicksNoNewDataFromServer() {
+        return ticksNoNewDataFromServer;
+    }
+
+    public void incrementTicksNoNewDataFromServer() {
+        this.ticksNoNewDataFromServer++;
+    }
+
+    public void resetTicksNoNewDataFromServer() {
+        this.ticksNoNewDataFromServer = 0;
+    }
+
+    public GameServer getPendingGameServer() {
+        return pendingGameServer;
+    }
+
+    public void setPendingGameServer(GameServer pendingGameServer) {
+        this.pendingGameServer = pendingGameServer;
     }
 }

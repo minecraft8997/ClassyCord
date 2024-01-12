@@ -13,10 +13,10 @@ public class Utils {
     public static final int SIDE_IDENTIFICATION_PACKET = 0x00;
     public static final int PROTOCOL_VERSION = 0x07;
     public static final int MAGIC = 0x42;
-    public static final int PING_PACKET = 0x01;
     public static final int DISCONNECT_PACKET = 0x0E;
     public static final int EXT_INFO_PACKET = 0x10;
     public static final int EXT_ENTRY_PACKET = 0x11;
+    public static final int MESSAGE_PACKET = 0x0d;
     public static final int PROTOCOL_STRING_LENGTH = 64;
 
     private Utils() {
@@ -82,6 +82,10 @@ public class Utils {
         byte[] buffer = new byte[PROTOCOL_STRING_LENGTH];
         src.readFully(buffer);
 
+        return readMCString(buffer);
+    }
+
+    public static String readMCString(byte[] buffer) throws IOException {
         int end = -1;
         for (int i = PROTOCOL_STRING_LENGTH - 1; i >= 0; i--) {
             if (buffer[i] != 0x20) {

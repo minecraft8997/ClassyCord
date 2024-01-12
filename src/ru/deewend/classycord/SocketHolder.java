@@ -57,6 +57,7 @@ public class SocketHolder {
     private final Socket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
+    private final AnalyzingStream analyzingStream;
     private long lastReadTimestamp;
 
     private GameServer gameServer;
@@ -80,6 +81,7 @@ public class SocketHolder {
         this.inputStream = socket.getInputStream();
         this.outputStream = socket.getOutputStream();
         this.lastReadTimestamp = creationTimestamp;
+        this.analyzingStream = new AnalyzingStream(this);
     }
 
     public void setGameServer(GameServer gameServer) throws IOException {
@@ -109,6 +111,8 @@ public class SocketHolder {
         Utils.writeMCString(verificationKey, serverOutputStream);
         serverOutputStream.write(supportsCPE ? Utils.MAGIC : 0x00);
         serverOutputStream.flush();
+
+        // state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
     }
 
     public int getExpectedServerPacketLength() {
@@ -142,6 +146,10 @@ public class SocketHolder {
 
     public OutputStream getOutputStream() {
         return outputStream;
+    }
+
+    public AnalyzingStream getAnalyzingStream() {
+        return analyzingStream;
     }
 
     public long getLastReadTimestamp() {

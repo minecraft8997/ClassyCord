@@ -3,7 +3,6 @@ package ru.deewend.classycord;
 import java.io.*;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class HandlerThread extends Thread {
@@ -95,6 +94,7 @@ public class HandlerThread extends Thread {
             OutputStream serverOutputStream = holder.getServerOutputStream();
             serverOutputStream.write(packet);
             serverOutputStream.flush();
+            holder.getAnalyzingStream().write(packet);
 
             return;
         }
@@ -157,6 +157,7 @@ public class HandlerThread extends Thread {
                         throw new SilentIOException(Utils.readMCString(stream));
                     }
                     default: {
+                        // we cannot receive a ServerIdentification packet at this state
                         throw new SilentIOException("Unexpected packetId");
                     }
                 }
@@ -176,9 +177,9 @@ public class HandlerThread extends Thread {
                 for (int i = 0; i < CPEArray.length; i++) {
                     int packetId = stream.readUnsignedByte();
                     if (packetId != Utils.EXT_ENTRY_PACKET) {
-                        if (packetId == Utils.DISCONNECT_PACKET) {
-                            throw new SilentIOException(Utils.readMCString(stream));
-                        }
+                        // it's very unlikely we can notice a Disconnect
+                        // packet here; we've already received (extEntryCount * 69)
+                        // bytes
 
                         throw new SilentIOException("Unexpected packetId");
                     }
@@ -210,11 +211,9 @@ public class HandlerThread extends Thread {
                 Thread.sleep(Math.max(TICK_INTERVAL_MS - delta, 1));
             }
         } catch (Throwable t) {
-            System.err.println("An exception/error has occurred, " +
-                    "printing the stacktrace...");
-            t.printStackTrace();
+            Log.s("An exception or error has occurred", t);
         } finally {
-            System.err.println("HandlerThread has died, terminating the proxy...");
+            Log.s("HandlerThread has died, the proxy will be terminated");
 
             System.exit(-1);
         }
@@ -229,7 +228,7 @@ public class HandlerThread extends Thread {
         } else {
             reason = "A disconnect or timeout occurred in your connection";
         }
-        // it will most likely mess up with other packets though
+        // it will most likely mess up with another packet though
         Utils.sendDisconnect(holder, reason);
 
         Socket clientSocket = holder.getSocket();

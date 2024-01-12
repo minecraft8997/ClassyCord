@@ -11,7 +11,7 @@ public class GameServer {
         Objects.requireNonNull(name);
         Objects.requireNonNull(address);
 
-        this.name = name;
+        this.name = name.toLowerCase();
         this.address = address;
         this.port = port;
     }

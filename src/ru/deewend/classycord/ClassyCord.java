@@ -168,6 +168,8 @@ public class ClassyCord {
     @SuppressWarnings("InfiniteLoopStatement")
     public void start() throws IOException {
         try (ServerSocket listeningSocket = new ServerSocket(port)) {
+            // fixme instantiate MORE HandlerThreads when needed
+            // this should be completely thread-safe
             handlerThread = new HandlerThread();
             handlerThread.start();
             Log.i("Listening on port " + port + "...");

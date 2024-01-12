@@ -24,7 +24,7 @@ public class AnalyzingStream extends OutputStream {
         for (Map.Entry<Long, byte[]> entry : map.entrySet()) {
             long pos = entry.getKey();
             byte[] buffer = entry.getValue();
-            int bufferIdx = (int) (currentPos - pos - 1 - /* skipping playerId */ 1);
+            int bufferIdx = (int) (currentPos - pos - 1L - /* skipping playerId */ 1L);
             if (bufferIdx < 0) continue;
             buffer[bufferIdx] = (byte) b;
             if (bufferIdx == Utils.PROTOCOL_STRING_LENGTH - 1) {
@@ -32,10 +32,11 @@ public class AnalyzingStream extends OutputStream {
                 keysToRemove.add(pos);
             }
         }
-        if (!keysToRemove.isEmpty()) {
-            for (Long key : keysToRemove) map.remove(key);
+        Utils.removeKeys(keysToRemove, map);
 
-            keysToRemove.clear();
+        if (currentPos == Long.MAX_VALUE) {
+            // good job, let's offer the client to reconnect
+            throw new IOException("currentPos reached its max value");
         }
         currentPos++;
     }

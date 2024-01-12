@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class Utils {
@@ -154,9 +156,33 @@ public class Utils {
         return String.format("%032x", new BigInteger(1, md5.digest()));
     }
 
+    @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
+    public static int getOnlinePlayerCount() {
+        int playerCount = 0;
+        int maxCount = ClassyCord.getInstance().getMaxHandlerThreadCount();
+        for (int i = 0; i < maxCount; i++) {
+            HandlerThread thread = ClassyCord.getInstance().getHandlerThreadAt(i);
+
+            synchronized (thread) {
+                playerCount += thread.getClientList().size();
+            }
+        }
+
+        return playerCount;
+    }
+
+    public static <K, V> void removeKeys(List<K> keysToRemove, Map<K, V> map) {
+        if (!keysToRemove.isEmpty()) {
+            for (K key : keysToRemove) {
+                map.remove(key);
+            }
+            keysToRemove.clear();
+        }
+    }
+
     public static String randomSalt() {
         // uuids are generated using SecureRandom (cryptographically secure generator)
-        String salt = UUID.randomUUID().toString() + UUID.randomUUID() + UUID.randomUUID();
+        String salt = UUID.randomUUID().toString() + UUID.randomUUID();
         salt = salt.replace("-", "");
 
         return salt;

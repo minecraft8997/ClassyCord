@@ -2,22 +2,34 @@ package ru.deewend.classycord;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class HandlerThread extends Thread {
-    public static final int MAX_ACTIVE_CONNECTIONS_COUNT = 100;
-    public static final int TICK_RATE = 25;
-    public static final int TICK_INTERVAL_MS = 1000 / TICK_RATE;
-    public static final int READ_TIMEOUT = 420_000;
+    public static final int MAX_ACTIVE_CONNECTIONS_COUNT =
+            ClassyCord.getInstance().getMaxConnectionsCountPerHandlerThread();
+    public static final long TICK_INTERVAL_MS =
+            1000L / ClassyCord.getInstance().getTickRateOfHandlerThread();
+    public static final long READ_TIMEOUT =
+            ClassyCord.getInstance().getReadTimeoutMillis();
+    public static final long EXCEPTION_MAP_STORAGE_TIMEOUT =
+            ClassyCord.getInstance().getExceptionMapStorageTimeoutMillis();
+    public static final int MIN_TICKS_TO_WAIT_BEFORE_RECONNECTING =
+            ClassyCord.getInstance().getMinTicksToWaitBeforeReconnecting();
 
-    private final List<SocketHolder> clientList;
+    private final List<SocketHolder> clientList = new ArrayList<>();
+    private final List<String> keysToRemove = new ArrayList<>();
+    private final Map<String, Pair<GameServer, Long>> exceptionMap = new HashMap<>();
 
     public HandlerThread() {
         setName("handler");
         setDaemon(true);
+    }
 
-        this.clientList = new ArrayList<>();
+    public static String getAddressAndUsername(SocketHolder holder) {
+        String username = holder.getUsername();
+
+        return Utils.getAddress(holder.getSocket()) +
+                (username != null ? " (" + username + ")" : "");
     }
 
     public synchronized boolean addClient(Socket socket) throws IOException {
@@ -34,6 +46,15 @@ public class HandlerThread extends Thread {
         global: for (int i = clientListSize - 1; i >= 0; i--) {
             SocketHolder holder = clientList.get(i);
             long currentTimeMillis = System.currentTimeMillis();
+
+            for (Map.Entry<String, Pair<GameServer, Long>> entry : exceptionMap.entrySet()) {
+                long timestampAdded = entry.getValue().getSecond();
+                if (currentTimeMillis - timestampAdded >= EXCEPTION_MAP_STORAGE_TIMEOUT) {
+                    keysToRemove.add(entry.getKey());
+                }
+            }
+            Utils.removeKeys(keysToRemove, exceptionMap);
+
             try {
                 while (true) {
                     int bytesCount = holder.getState().getExpectedClientPacketLength();
@@ -56,7 +77,6 @@ public class HandlerThread extends Thread {
                         break;
                     }
                 }
-
                 while (true) {
                     if (holder.getGameServer() == null) break;
 
@@ -74,8 +94,8 @@ public class HandlerThread extends Thread {
                     } else {
                         holder.incrementTicksNoNewDataFromServer();
                         GameServer pendingGameServer = holder.getPendingGameServer();
-                        if (holder.getTicksNoNewDataFromServer() >= ClassyCord
-                                .getInstance().getMinTicksToWaitBeforeReconnecting() &&
+                        if (holder.getTicksNoNewDataFromServer() >=
+                                MIN_TICKS_TO_WAIT_BEFORE_RECONNECTING &&
                                 pendingGameServer != null
                         ) {
                             holder.setGameServer(pendingGameServer);
@@ -96,7 +116,7 @@ public class HandlerThread extends Thread {
         }
     }
 
-    private static void handleDataFromClient(
+    private void handleDataFromClient(
             SocketHolder holder, byte[] packet
     ) throws IOException, SilentIOException {
         SocketHolder.State state = holder.getState();
@@ -130,17 +150,20 @@ public class HandlerThread extends Thread {
         holder.setUsername(username);
 
         boolean supportsCPE = (stream.readUnsignedByte() == Utils.MAGIC);
-        if (supportsCPE) {
-            holder.setState(SocketHolder.State.WAITING_FOR_EXT_INFO_PT_1);
-        } else {
-            holder.setState(SocketHolder.State.CONNECTED);
-        }
         holder.setSupportsCPE(supportsCPE);
 
-        holder.setGameServer(ClassyCord.getInstance().getFirstServer());
+        Pair<GameServer, Long> exception = exceptionMap.get(username);
+        GameServer desiredGameServer;
+        if (exception != null) {
+            desiredGameServer = exception.getFirst();
+            exceptionMap.remove(username);
+        } else {
+            desiredGameServer = ClassyCord.getInstance().getFirstServer();
+        }
+        holder.setGameServer(desiredGameServer);
     }
 
-    private static void handleDataFromServer(
+    private void handleDataFromServer(
             SocketHolder holder, byte[] packet
     ) throws IOException, SilentIOException {
         OutputStream clientOutputStream = holder.getOutputStream();
@@ -160,6 +183,11 @@ public class HandlerThread extends Thread {
                     case Utils.EXT_INFO_PACKET: {
                         // we don't have to skip bytes since it's a "toy" stream
                         holder.setState(SocketHolder.State.WAITING_FOR_EXT_INFO_PT_2);
+
+                        break;
+                    }
+                    case Utils.SIDE_IDENTIFICATION_PACKET: {
+                        holder.setState(SocketHolder.State.CONNECTED);
 
                         break;
                     }
@@ -199,7 +227,17 @@ public class HandlerThread extends Thread {
                     CPEArray[i][0] = extName;
                     CPEArray[i][1] = version;
                 }
-                holder.setCPEArrayConnectionWasInitializedWith(CPEArray);
+                Object[][] initialCPEArray = holder.getCPEArrayConnectionWasInitializedWith();
+                if (initialCPEArray != null) {
+                    if (!Arrays.deepEquals(CPEArray, initialCPEArray)) {
+                        exceptionMap.put(holder.getUsername(),
+                                Pair.of(holder.getGameServer(), System.currentTimeMillis()));
+
+                        throw new SilentIOException("Press \"Reconnect\" button");
+                    }
+                } else {
+                    holder.setCPEArrayConnectionWasInitializedWith(CPEArray);
+                }
                 holder.setState(SocketHolder.State.CONNECTED);
 
                 break;
@@ -218,7 +256,7 @@ public class HandlerThread extends Thread {
                 long start = System.currentTimeMillis();
                 tick();
                 long delta = Utils.delta(start);
-                Thread.sleep(Math.max(TICK_INTERVAL_MS - delta, 1));
+                Thread.sleep(Math.max(TICK_INTERVAL_MS - delta, 1L));
             }
         } catch (Throwable t) {
             Log.s("An exception or error has occurred", t);
@@ -230,7 +268,9 @@ public class HandlerThread extends Thread {
     }
 
     private void close(SocketHolder holder, Throwable t) {
-        // if (t != null) t.printStackTrace();
+        if (ClassyCord.DEBUG) {
+            Log.w("Caught a Throwable, closing the connection", t);
+        }
 
         String reason;
         if (t instanceof SilentIOException) {
@@ -238,18 +278,19 @@ public class HandlerThread extends Thread {
         } else {
             reason = "A disconnect or timeout occurred in your connection";
         }
-        // it will most likely mess up with another packet though
+        // there is a chance it will mess up with another packet though
         Utils.sendDisconnect(holder, reason);
 
-        Socket clientSocket = holder.getSocket();
-        Utils.close(clientSocket);
+        Utils.close(holder.getSocket());
         Utils.close(holder.getServerSocket());
         synchronized (this) {
             clientList.remove(holder);
         }
-        String username = holder.getUsername();
 
-        Log.i(Utils.getAddress(clientSocket) +
-                (username != null ? " (" + username + ")" : "") + " disconnected");
+        Log.i(getAddressAndUsername(holder) + " disconnected");
+    }
+
+    List<SocketHolder> getClientList() {
+        return clientList;
     }
 }

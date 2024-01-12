@@ -6,8 +6,14 @@ import java.net.Socket;
 import java.util.*;
 
 public class ClassyCord {
+    public static final String VERSION = "0.9";
+    public static final boolean DEBUG = Boolean
+            .parseBoolean(System.getProperty("ccdebug", "false"));
+
     private static ClassyCord theClassyCord;
 
+    private final String name;
+    private final boolean publicServer;
     private final int port;
     private final String salt;
     private final boolean onlineMode;
@@ -15,14 +21,20 @@ public class ClassyCord {
     private final String logFormat;
     private final boolean saveLogsOnDisk;
     private final String logFileNameFormat;
+    private final HandlerThread[] handlerThreads;
+    private final int maxConnectionsCountPerHandlerThread;
+    private final int tickRateOfHandlerThread;
+    private final long readTimeoutMillis;
+    private final long exceptionMapStorageTimeoutMillis;
     private final int minTicksToWaitBeforeReconnecting;
     private final GameServer firstServer;
+    private final int maxPlayerCount;
     private final Map<String, GameServer> gameServerMap = new HashMap<>();
-    @SuppressWarnings("FieldCanBeLocal")
-    private HandlerThread handlerThread;
     private Socket beingRegistered;
 
     public ClassyCord(
+            String name,
+            boolean publicServer,
             int port,
             String salt,
             boolean onlineMode,
@@ -30,10 +42,16 @@ public class ClassyCord {
             String logFormat,
             boolean saveLogsOnDisk,
             String logFileNameFormat,
+            int maxHandlerThreadCount,
+            int maxConnectionsCountPerHandlerThread,
+            int tickRateOfHandlerThread,
+            long readTimeoutMillis,
+            long exceptionMapStorageTimeoutMillis,
             int minTicksToWaitBeforeReconnecting,
             GameServer firstServer,
             GameServer... gameServers
     ) {
+        Objects.requireNonNull(name);
         Objects.requireNonNull(salt);
         Objects.requireNonNull(firstServer);
         Objects.requireNonNull(gameServers);
@@ -46,6 +64,8 @@ public class ClassyCord {
         }
         theClassyCord = this;
 
+        this.name = name;
+        this.publicServer = publicServer;
         this.port = port;
         this.salt = salt;
         this.onlineMode = onlineMode;
@@ -59,9 +79,15 @@ public class ClassyCord {
         this.logFormat = logFormat;
         this.saveLogsOnDisk = saveLogsOnDisk;
         this.logFileNameFormat = logFileNameFormat;
+        this.handlerThreads = new HandlerThread[maxHandlerThreadCount];
+        this.maxConnectionsCountPerHandlerThread = maxConnectionsCountPerHandlerThread;
+        this.tickRateOfHandlerThread = tickRateOfHandlerThread;
+        this.readTimeoutMillis = readTimeoutMillis;
+        this.exceptionMapStorageTimeoutMillis = exceptionMapStorageTimeoutMillis;
         this.minTicksToWaitBeforeReconnecting = minTicksToWaitBeforeReconnecting;
 
         this.firstServer = firstServer;
+        this.maxPlayerCount = maxHandlerThreadCount * maxConnectionsCountPerHandlerThread;
         for (GameServer gameServer : gameServers) {
             Objects.requireNonNull(gameServer);
 
@@ -76,11 +102,20 @@ public class ClassyCord {
         if (gameServerMap.get(firstServer.getName()) != firstServer) {
             Log.w("Could not find the first server in the list of all nodes");
         }
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> Log.i("Goodbye!")));
     }
 
     public static void main(String[] args) throws IOException {
+        printVersionInfo(false);
+        System.out.println("Make sure to check for updates sometimes: " +
+                "https://github.com/minecraft8997/ClassyCord");
+        System.out.println();
+
         Properties props = new Properties();
         props.setProperty("ready", "false");
+        props.setProperty("name", "A ClassyCord instance");
+        props.setProperty("public", "true");
         props.setProperty("port", "25565");
         props.setProperty("salt", Utils.randomSalt());
         props.setProperty("onlineMode", "true");
@@ -88,6 +123,11 @@ public class ClassyCord {
         props.setProperty("logFormat", "[HH:mm:ss dd.MM.yyyy] ");
         props.setProperty("saveLogsOnDisk", "true");
         props.setProperty("logFileNameFormat", "dd-MM-yyyy-logs.txt");
+        props.setProperty("maxHandlerThreadCount", "2");
+        props.setProperty("maxConnectionsCountPerHandlerThread", "100");
+        props.setProperty("tickRateOfHandlerThread", "25");
+        props.setProperty("readTimeoutMillis", "420000");
+        props.setProperty("exceptionMapStorageTimeoutMillis", "900000");
         props.setProperty("minTicksToWaitBeforeReconnecting", "2");
         props.setProperty("serverCount", "1");
         props.setProperty("server1Name", "Freebuild");
@@ -118,6 +158,30 @@ public class ClassyCord {
         boolean saveLogsOnDisk = Boolean
                 .parseBoolean(props.getProperty("saveLogsOnDisk"));
         String logFileNameFormat = props.getProperty("logFileNameFormat");
+        int maxHandlerThreadCount = Integer.parseInt(
+                props.getProperty("maxHandlerThreadCount"));
+        if (maxHandlerThreadCount < 1) {
+            System.err.println("maxHandlerThreadCount is too low");
+
+            System.exit(-1);
+        }
+        int maxConnectionsCountPerHandlerThread = Integer.parseInt(
+                props.getProperty("maxConnectionsCountPerHandlerThread"));
+        int tickRateOfHandlerThread = Integer.parseInt(
+                props.getProperty("tickRateOfHandlerThread"));
+        if (tickRateOfHandlerThread < 1) {
+            System.err.println("tickRateOfHandlerThread is too low");
+
+            System.exit(-1);
+        }
+        if (1000 % tickRateOfHandlerThread != 0) {
+            System.err.println("It's better (but not " +
+                    "obligatory) when 1000 % tickRateOfHandlerThread == 0");
+        }
+        long readTimeoutMillis = Long.parseLong(
+                props.getProperty("readTimeoutMillis"));
+        long exceptionMapStorageTimeoutMillis = Long.parseLong(
+                props.getProperty("exceptionMapStorageTimeoutMillis"));
         int minTicksToWaitBeforeReconnecting = Integer.parseInt(
                 props.getProperty("minTicksToWaitBeforeReconnecting"));
 
@@ -162,10 +226,22 @@ public class ClassyCord {
                 logFormat,
                 saveLogsOnDisk,
                 logFileNameFormat,
+                maxHandlerThreadCount,
+                maxConnectionsCountPerHandlerThread,
+                tickRateOfHandlerThread,
+                readTimeoutMillis,
+                exceptionMapStorageTimeoutMillis,
                 minTicksToWaitBeforeReconnecting,
                 firstServer,
                 gameServers
         )).start();
+        // by the way after instantiating ClassyCord we can now use methods of Log class
+    }
+
+    public static void printVersionInfo(boolean log) {
+        String message = "You are running ClassyCord v" + VERSION + " by deewend";
+        if (log) Log.i(message);
+        else System.out.println(message);
     }
 
     public static ClassyCord getInstance() {
@@ -174,11 +250,10 @@ public class ClassyCord {
 
     @SuppressWarnings("InfiniteLoopStatement")
     public void start() throws IOException {
+        (new ConsoleThread()).start();
+
         try (ServerSocket listeningSocket = new ServerSocket(port)) {
-            // fixme instantiate MORE HandlerThreads when needed
-            // this should be completely thread-safe
-            handlerThread = new HandlerThread();
-            handlerThread.start();
+            startHandlerThreadAt(0);
             Log.i("Listening on port " + port + "...");
 
             while (true) {
@@ -186,19 +261,30 @@ public class ClassyCord {
                 beingRegistered.setTcpNoDelay(true);
                 Log.i(Utils.getAddress(beingRegistered) + " connected");
 
-                boolean successfullyAdded;
-                try {
-                    successfullyAdded = handlerThread.addClient(beingRegistered);
-                } catch (IOException e) {
-                    reportErrorAndClose(true);
+                int i = 0;
+                boolean successfullyAdded = false;
+                while (!successfullyAdded) {
+                    try {
+                        successfullyAdded = handlerThreads[i++].addClient(beingRegistered);
+                    } catch (IOException e) {
+                        reportErrorAndClose(true);
 
-                    continue;
+                        break;
+                    }
+                    if (i >= handlerThreads.length) break;
+                    if (handlerThreads[i] == null) startHandlerThreadAt(i);
                 }
+
                 if (!successfullyAdded) {
                     reportErrorAndClose(false);
                 }
             }
         }
+    }
+
+    private void startHandlerThreadAt(int i) {
+        handlerThreads[i] = new HandlerThread();
+        handlerThreads[i].start();
     }
 
     public GameServer getGameServer(String name) {
@@ -212,6 +298,14 @@ public class ClassyCord {
         Utils.close(beingRegistered);
 
         Log.i(Utils.getAddress(beingRegistered) + " disconnected");
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public boolean isPublicServer() {
+        return publicServer;
     }
 
     public int getPort() {
@@ -242,11 +336,39 @@ public class ClassyCord {
         return logFileNameFormat;
     }
 
+    public int getMaxHandlerThreadCount() {
+        return handlerThreads.length;
+    }
+
+    public HandlerThread getHandlerThreadAt(int i) {
+        return handlerThreads[i];
+    }
+
+    public int getMaxConnectionsCountPerHandlerThread() {
+        return maxConnectionsCountPerHandlerThread;
+    }
+
+    public int getTickRateOfHandlerThread() {
+        return tickRateOfHandlerThread;
+    }
+
+    public long getReadTimeoutMillis() {
+        return readTimeoutMillis;
+    }
+
+    public long getExceptionMapStorageTimeoutMillis() {
+        return exceptionMapStorageTimeoutMillis;
+    }
+
     public int getMinTicksToWaitBeforeReconnecting() {
         return minTicksToWaitBeforeReconnecting;
     }
 
     public GameServer getFirstServer() {
         return firstServer;
+    }
+
+    public int getMaxPlayerCount() {
+        return maxPlayerCount;
     }
 }

@@ -114,7 +114,11 @@ public class SocketHolder {
         serverOutputStream.write(supportsCPE ? Utils.MAGIC : 0x00);
         serverOutputStream.flush();
 
-        // state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
+        if (supportsCPE) {
+            setState(SocketHolder.State.WAITING_FOR_EXT_INFO_PT_1);
+        } else {
+            setState(SocketHolder.State.CONNECTED);
+        }
     }
 
     public int getExpectedServerPacketLength() {

@@ -154,9 +154,10 @@ public class ClassyCord {
 
             return;
         }
+        String serverName = props.getProperty("name");
+        boolean publicServer = Boolean.parseBoolean(props.getProperty("public"));
         String logFormat = props.getProperty("logFormat");
-        boolean saveLogsOnDisk = Boolean
-                .parseBoolean(props.getProperty("saveLogsOnDisk"));
+        boolean saveLogsOnDisk = Boolean.parseBoolean(props.getProperty("saveLogsOnDisk"));
         String logFileNameFormat = props.getProperty("logFileNameFormat");
         int maxHandlerThreadCount = Integer.parseInt(
                 props.getProperty("maxHandlerThreadCount"));
@@ -219,6 +220,8 @@ public class ClassyCord {
                 "reading config, collected " + gameServers.length + " server(s)");
 
         (new ClassyCord(
+                serverName,
+                publicServer,
                 port,
                 salt,
                 onlineMode,
@@ -251,6 +254,7 @@ public class ClassyCord {
     @SuppressWarnings("InfiniteLoopStatement")
     public void start() throws IOException {
         (new ConsoleThread()).start();
+        if (onlineMode) (new HeartbeatThread()).start();
 
         try (ServerSocket listeningSocket = new ServerSocket(port)) {
             startHandlerThreadAt(0);

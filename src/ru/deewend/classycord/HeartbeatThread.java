@@ -8,9 +8,17 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class HeartbeatThread extends Thread {
+    public static final long INTERVAL_MILLIS = 30_000L;
+
     private boolean recommendedToUseHttpsInstead;
 
+    public HeartbeatThread() {
+        setName("heartbeat");
+        setDaemon(true);
+    }
+
     @Override
+    @SuppressWarnings("BusyWait")
     public void run() {
         while (true) {
             String requestUrl = ClassyCord.getInstance().getHeartbeatUrl();
@@ -25,8 +33,9 @@ public class HeartbeatThread extends Thread {
                 HttpURLConnection connection =
                         (HttpURLConnection) (new URL(requestUrl)).openConnection();
                 if (!(connection instanceof HttpsURLConnection) && !recommendedToUseHttpsInstead) {
-                    Log.w("Please use https:// " +
-                            "instead for a heartbeatUrl link, it's a much better option");
+                    Log.w("Please use https:// instead for a heartbeatUrl link, " +
+                            "it's a more secure option for transferring server " +
+                            "salt, which should be kept in a secret");
 
                     recommendedToUseHttpsInstead = true;
                 }
@@ -48,10 +57,18 @@ public class HeartbeatThread extends Thread {
                     }
                 }
 
-                Thread.sleep(30000L);
-            } catch (Exception e) {
-                Log.w("An Exception occurred in HeartbeatThread", e);
+                Thread.sleep(INTERVAL_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Log.s("Received a request to interrupt HeartbeatThread", e);
+
+                break;
+            } catch (IOException e) {
+                Log.s("An IOException occurred in HeartbeatThread", e);
             }
         }
+
+        Log.s("HeartbeatThread loop has finished, the proxy will be terminated");
+        System.exit(-1);
     }
 }

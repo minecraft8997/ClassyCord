@@ -58,7 +58,8 @@ public class ConsoleThread extends Thread {
                 }
             }
             Log.i("");
-            Log.i("Total online player count: " + playersOnline);
+            Log.i("Total online player count: " +
+                    playersOnline + "/" + ClassyCord.getInstance().getMaxPlayerCount());
         } else if (line.equalsIgnoreCase("exit")) {
             System.exit(0);
         } else {

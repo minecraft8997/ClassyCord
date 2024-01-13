@@ -112,7 +112,7 @@ public class ClassyCord {
                 "https://github.com/minecraft8997/ClassyCord");
         System.out.println();
 
-        Properties props = new Properties();
+        OrderedProperties props = new OrderedProperties();
         props.setProperty("ready", "false");
         props.setProperty("name", "A ClassyCord instance");
         props.setProperty("public", "true");

@@ -242,7 +242,7 @@ public class ClassyCord {
     }
 
     public static void printVersionInfo(boolean log) {
-        String message = "You are running ClassyCord v" + VERSION + " by deewend";
+        String message = "You are running ClassyCord " + VERSION + " by deewend";
         if (log) Log.i(message);
         else System.out.println(message);
     }

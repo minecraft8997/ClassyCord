@@ -162,6 +162,7 @@ public class Utils {
         int maxCount = ClassyCord.getInstance().getMaxHandlerThreadCount();
         for (int i = 0; i < maxCount; i++) {
             HandlerThread thread = ClassyCord.getInstance().getHandlerThreadAt(i);
+            if (thread == null) break;
 
             synchronized (thread) {
                 playerCount += thread.getClientList().size();

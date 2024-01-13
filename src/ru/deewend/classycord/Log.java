@@ -133,7 +133,7 @@ public class Log {
         stream.println(FORMAT.format(new Date()) + prefix + message);
         if (t != null) {
             stream.println("Printing the stacktrace...");
-            t.printStackTrace();
+            t.printStackTrace(stream);
         }
     }
 }

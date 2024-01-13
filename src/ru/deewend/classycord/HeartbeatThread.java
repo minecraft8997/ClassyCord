@@ -64,7 +64,7 @@ public class HeartbeatThread extends Thread {
 
                 break;
             } catch (IOException e) {
-                Log.s("An IOException occurred in HeartbeatThread", e);
+                Log.s("An IOException occurred while sending a heartbeat", e);
             }
         }
 

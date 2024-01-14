@@ -121,10 +121,13 @@ public class HandlerThread extends Thread {
     ) throws IOException, SilentIOException {
         SocketHolder.State state = holder.getState();
         if (state != SocketHolder.State.WAITING_FOR_PLAYER_IDENTIFICATION) {
-            OutputStream serverOutputStream = holder.getServerOutputStream();
-            serverOutputStream.write(packet);
-            serverOutputStream.flush();
-            holder.getAnalyzingStream().write(packet);
+            AnalyzingStream analyzingStream = holder.getAnalyzingStream();
+            if (!analyzingStream.isPaused()) {
+                OutputStream serverOutputStream = holder.getServerOutputStream();
+                serverOutputStream.write(packet);
+                serverOutputStream.flush();
+            }
+            analyzingStream.write(packet);
 
             return;
         }
@@ -170,6 +173,12 @@ public class HandlerThread extends Thread {
         clientOutputStream.write(packet);
         clientOutputStream.flush();
 
+        AnalyzingStream analyzingStream = holder.getAnalyzingStream();
+        if (analyzingStream.isRecording()) {
+            byte[] cpeHandshake = analyzingStream.stopRecording();
+            holder.setClientCPEHandshake(cpeHandshake);
+        }
+
         SocketHolder.State state = holder.getState();
         if (state == SocketHolder.State.CONNECTED) return;
 
@@ -177,12 +186,12 @@ public class HandlerThread extends Thread {
         DataInputStream stream = new DataInputStream(stream0);
 
         switch (state) {
-            case WAITING_FOR_EXT_INFO_PT_1: {
+            case WAITING_FOR_SERVER_EXT_INFO_PT_1: {
                 int packetId = stream.readUnsignedByte();
                 switch (packetId) {
                     case Utils.EXT_INFO_PACKET: {
                         // we don't have to skip bytes since it's a "toy" stream
-                        holder.setState(SocketHolder.State.WAITING_FOR_EXT_INFO_PT_2);
+                        holder.setState(SocketHolder.State.WAITING_FOR_SERVER_EXT_INFO_PT_2);
 
                         break;
                     }
@@ -202,15 +211,15 @@ public class HandlerThread extends Thread {
 
                 break;
             }
-            case WAITING_FOR_EXT_INFO_PT_2: {
+            case WAITING_FOR_SERVER_EXT_INFO_PT_2: {
                 short extEntryCount = stream.readShort();
-                holder.setExpectedExtEntryCount(extEntryCount);
-                holder.setState(SocketHolder.State.WAITING_FOR_ALL_EXT_ENTRIES);
+                holder.setExpectedServerExtEntryCount(extEntryCount);
+                holder.setState(SocketHolder.State.WAITING_FOR_ALL_SERVER_EXT_ENTRIES);
 
                 break;
             }
-            case WAITING_FOR_ALL_EXT_ENTRIES: {
-                int extEntryCount = holder.getExpectedExtEntryCount();
+            case WAITING_FOR_ALL_SERVER_EXT_ENTRIES: {
+                int extEntryCount = holder.getExpectedServerExtEntryCount();
                 Object[][] CPEArray = new Object[extEntryCount][2];
                 for (int i = 0; i < CPEArray.length; i++) {
                     int packetId = stream.readUnsignedByte();
@@ -227,7 +236,8 @@ public class HandlerThread extends Thread {
                     CPEArray[i][0] = extName;
                     CPEArray[i][1] = version;
                 }
-                Object[][] initialCPEArray = holder.getCPEArrayConnectionWasInitializedWith();
+                Object[][] initialCPEArray = holder
+                        .getServerCPEArrayConnectionWasInitializedWith();
                 if (initialCPEArray != null) {
                     if (!Arrays.deepEquals(CPEArray, initialCPEArray)) {
                         exceptionMap.put(holder.getUsername(),
@@ -235,8 +245,16 @@ public class HandlerThread extends Thread {
 
                         throw new SilentIOException("Press \"Reconnect\" button");
                     }
+                    byte[] clientCPEHandshake = holder.getClientCPEHandshake();
+                    OutputStream serverOutputStream = holder.getServerOutputStream();
+                    serverOutputStream.write(clientCPEHandshake);
+                    byte[] pausedBytes = analyzingStream.finishPause();
+                    serverOutputStream.write(pausedBytes);
+
+                    serverOutputStream.flush();
                 } else {
-                    holder.setCPEArrayConnectionWasInitializedWith(CPEArray);
+                    holder.setServerCPEArrayConnectionWasInitializedWith(CPEArray);
+                    holder.getAnalyzingStream().startRecording();
                 }
                 holder.setState(SocketHolder.State.CONNECTED);
 

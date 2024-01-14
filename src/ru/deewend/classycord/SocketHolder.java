@@ -9,7 +9,8 @@ import java.util.Objects;
 
 public class SocketHolder {
     public enum State {
-        WAITING_FOR_PLAYER_IDENTIFICATION(0x00, (1 + 1 + 64 + 64 + 1)),
+        WAITING_FOR_PLAYER_IDENTIFICATION(
+                Utils.SIDE_IDENTIFICATION_PACKET, (1 + 1 + 64 + 64 + 1)),
         /*
          * We have to separate a single state between two parts, because
          * theoretically we can just receive a Disconnect packet (65 bytes)
@@ -18,9 +19,11 @@ public class SocketHolder {
          *
          * Thus, we'll be waiting for at least 65 bytes at first time.
          */
-        WAITING_FOR_EXT_INFO_PT_1(ANY_PACKET_ID, ANY_PACKET_LENGTH),
-        WAITING_FOR_EXT_INFO_PT_2(ANY_PACKET_ID, ANY_PACKET_LENGTH),
-        WAITING_FOR_ALL_EXT_ENTRIES(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_SERVER_EXT_INFO_PT_1(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_SERVER_EXT_INFO_PT_2(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_ALL_SERVER_EXT_ENTRIES(ANY_PACKET_ID, ANY_PACKET_LENGTH),
+        WAITING_FOR_CLIENT_EXT_INFO(Utils.EXT_INFO_PACKET, (1 + 64 + 2)),
+        WAITING_FOR_ALL_CLIENT_EXT_ENTRIES(Utils.EXT_ENTRY_PACKET, ANY_PACKET_LENGTH),
         CONNECTED(ANY_PACKET_ID, ANY_PACKET_LENGTH);
 
         private final int expectedClientPacketId;
@@ -68,8 +71,9 @@ public class SocketHolder {
 
     private State state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
     private boolean supportsCPE;
-    private short expectedExtEntryCount;
-    private Object[][] CPEArrayConnectionWasInitializedWith;
+    private short expectedServerExtEntryCount;
+    private Object[][] serverCPEArrayConnectionWasInitializedWith;
+    private byte[] clientCPEHandshake;
     private String username;
     private int ticksNoNewDataFromServer;
     private GameServer pendingGameServer;
@@ -115,7 +119,7 @@ public class SocketHolder {
         serverOutputStream.flush();
 
         if (supportsCPE) {
-            setState(SocketHolder.State.WAITING_FOR_EXT_INFO_PT_1);
+            setState(SocketHolder.State.WAITING_FOR_SERVER_EXT_INFO_PT_1);
         } else {
             setState(SocketHolder.State.CONNECTED);
         }
@@ -123,9 +127,9 @@ public class SocketHolder {
 
     public int getExpectedServerPacketLength() {
         switch (state) {
-            case WAITING_FOR_EXT_INFO_PT_1: return 65;
-            case WAITING_FOR_EXT_INFO_PT_2: return 2; /* only one short is remaining */
-            case WAITING_FOR_ALL_EXT_ENTRIES: return expectedExtEntryCount * 69;
+            case WAITING_FOR_SERVER_EXT_INFO_PT_1: return 65;
+            case WAITING_FOR_SERVER_EXT_INFO_PT_2: return 2; /* only one short is remaining */
+            case WAITING_FOR_ALL_SERVER_EXT_ENTRIES: return expectedServerExtEntryCount * 69;
             default: return ANY_PACKET_LENGTH;
         }
     }
@@ -206,20 +210,28 @@ public class SocketHolder {
         this.supportsCPE = supportsCPE;
     }
 
-    public short getExpectedExtEntryCount() {
-        return expectedExtEntryCount;
+    public short getExpectedServerExtEntryCount() {
+        return expectedServerExtEntryCount;
     }
 
-    public void setExpectedExtEntryCount(short expectedExtEntryCount) {
-        this.expectedExtEntryCount = expectedExtEntryCount;
+    public void setExpectedServerExtEntryCount(short expectedServerExtEntryCount) {
+        this.expectedServerExtEntryCount = expectedServerExtEntryCount;
     }
 
-    public Object[][] getCPEArrayConnectionWasInitializedWith() {
-        return CPEArrayConnectionWasInitializedWith;
+    public Object[][] getServerCPEArrayConnectionWasInitializedWith() {
+        return serverCPEArrayConnectionWasInitializedWith;
     }
 
-    public void setCPEArrayConnectionWasInitializedWith(Object[][] CPEArray) {
-        this.CPEArrayConnectionWasInitializedWith = CPEArray;
+    public void setServerCPEArrayConnectionWasInitializedWith(Object[][] CPEArray) {
+        this.serverCPEArrayConnectionWasInitializedWith = CPEArray;
+    }
+
+    public byte[] getClientCPEHandshake() {
+        return clientCPEHandshake;
+    }
+
+    public void setClientCPEHandshake(byte[] clientCPEHandshake) {
+        this.clientCPEHandshake = clientCPEHandshake;
     }
 
     public String getUsername() {

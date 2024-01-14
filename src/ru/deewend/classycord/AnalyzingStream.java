@@ -1,5 +1,6 @@
 package ru.deewend.classycord;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.*;
@@ -11,6 +12,8 @@ public class AnalyzingStream extends OutputStream {
     private long currentPos = Long.MIN_VALUE;
     private final Map<Long, byte[]> map = new HashMap<>();
     private final List<Long> keysToRemove = new ArrayList<>();
+    private ByteArrayOutputStream recordedBytes;
+    private ByteArrayOutputStream pausedBytes;
 
     public AnalyzingStream(SocketHolder holder) {
         this.holder = holder;
@@ -18,6 +21,12 @@ public class AnalyzingStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
+        if (isRecording()) {
+            recordedBytes.write(b);
+        }
+        if (isPaused()) {
+            pausedBytes.write(b);
+        }
         if (b == Utils.MESSAGE_PACKET) {
             map.put(currentPos, new byte[Utils.PROTOCOL_STRING_LENGTH]);
         }
@@ -41,6 +50,36 @@ public class AnalyzingStream extends OutputStream {
         currentPos++;
     }
 
+    public void pause() {
+        pausedBytes = new ByteArrayOutputStream();
+    }
+
+    public boolean isPaused() {
+        return pausedBytes != null;
+    }
+
+    public byte[] finishPause() {
+        byte[] paused = pausedBytes.toByteArray();
+        pausedBytes = null;
+
+        return paused;
+    }
+
+    public void startRecording() {
+        recordedBytes = new ByteArrayOutputStream();
+    }
+
+    public boolean isRecording() {
+        return recordedBytes != null;
+    }
+
+    public byte[] stopRecording() {
+        byte[] recorded = recordedBytes.toByteArray();
+        recordedBytes = null;
+
+        return recorded;
+    }
+
     private void handleMessage(String message) {
         message = message.toLowerCase();
 
@@ -51,6 +90,7 @@ public class AnalyzingStream extends OutputStream {
             if (gameServer == null || holder.getGameServer() == gameServer) return;
 
             holder.setPendingGameServer(gameServer);
+            pause();
         }
     }
 }

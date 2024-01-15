@@ -4,28 +4,28 @@ import java.io.*;
 import java.util.*;
 
 public class OrderedProperties {
-    private final Properties backendProperties = new Properties();
     private final List<Pair<String, String>> orderedProperties = new LinkedList<>();
 
     public void setProperty(String key, String value) {
         Objects.requireNonNull(key);
         Objects.requireNonNull(value);
 
-        if (!backendProperties.containsKey(key)) {
-            put(key, value);
-
-            return;
+        Pair<String, String> entry = findEntry(key);
+        if (entry != null) {
+            String oldValue = entry.getSecond();
+            orderedProperties.remove(Pair.of(key, oldValue));
         }
-        String previousValue = (String) backendProperties.get(key);
-        orderedProperties.remove(Pair.of(key, previousValue));
 
-        put(key, value);
+        orderedProperties.add(Pair.of(key, value));
     }
 
     public String getProperty(String key) {
         Objects.requireNonNull(key);
 
-        return (String) backendProperties.get(key);
+        Pair<String, String> entry = findEntry(key);
+        if (entry == null) return null;
+
+        return entry.getSecond();
     }
 
     private Pair<String, String> findEntry(String key) {
@@ -39,19 +39,17 @@ public class OrderedProperties {
     public void load(InputStream stream) throws IOException {
         Objects.requireNonNull(stream);
 
-        backendProperties.load(stream);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+            String line;
 
-        Enumeration<Object> keys = backendProperties.keys();
-        while (keys.hasMoreElements()) {
-            String key = (String) keys.nextElement();
-            String value = (String) backendProperties.get(key);
+            while ((line = reader.readLine()) != null) {
+                int eqIdx = line.indexOf('=');
+                if (line.startsWith("#") || eqIdx == -1) continue;
 
-            Pair<String, String> entry = findEntry(key);
-            if (entry != null) {
-                String currentValue = entry.getSecond();
-                if (!value.equals(currentValue)) entry.setSecond(value);
-            } else {
-                orderedProperties.add(Pair.of(key, value));
+                String key = line.substring(0, eqIdx);
+                String value = line.substring(eqIdx + 1);
+
+                setProperty(key, value);
             }
         }
     }
@@ -71,10 +69,5 @@ public class OrderedProperties {
                 writer.newLine();
             }
         }
-    }
-
-    private void put(String key, String value) {
-        backendProperties.put(key, value);
-        orderedProperties.add(Pair.of(key, value));
     }
 }

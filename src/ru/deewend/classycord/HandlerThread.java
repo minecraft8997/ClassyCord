@@ -194,11 +194,21 @@ public class HandlerThread extends Thread {
                     case Utils.EXT_INFO_PACKET: {
                         // we don't have to skip bytes since it's a "toy" stream
                         holder.setState(SocketHolder.State.WAITING_FOR_SERVER_EXT_INFO_PT_2);
+                        Boolean isCPEConnection = holder.isCPEConnection();
+                        if (isCPEConnection != null && !isCPEConnection) {
+                            byeBye(holder);
+                        }
+                        holder.setCPEConnection(true);
 
                         break;
                     }
                     case Utils.SIDE_IDENTIFICATION_PACKET: {
                         holder.setState(SocketHolder.State.CONNECTED);
+                        Boolean isCPEConnection = holder.isCPEConnection();
+                        if (isCPEConnection != null && isCPEConnection) {
+                            byeBye(holder);
+                        }
+                        holder.setCPEConnection(false);
 
                         break;
                     }
@@ -242,10 +252,7 @@ public class HandlerThread extends Thread {
                         .getServerCPEArrayConnectionWasInitializedWith();
                 if (initialCPEArray != null) {
                     if (!Arrays.deepEquals(CPEArray, initialCPEArray)) {
-                        exceptionMap.put(holder.getUsername(),
-                                Pair.of(holder.getGameServer(), System.currentTimeMillis()));
-
-                        throw new SilentIOException("Press \"Reconnect\" button");
+                        byeBye(holder);
                     }
                     byte[] clientCPEHandshake = holder.getClientCPEHandshake();
                     OutputStream serverOutputStream = holder.getServerOutputStream();
@@ -264,6 +271,13 @@ public class HandlerThread extends Thread {
                 throw new UnsupportedOperationException("Unknown state");
             }
         }
+    }
+
+    private void byeBye(SocketHolder holder) throws SilentIOException {
+        exceptionMap.put(holder.getUsername(),
+                Pair.of(holder.getGameServer(), System.currentTimeMillis()));
+
+        throw new SilentIOException("Press \"Reconnect\" button");
     }
 
     @Override

@@ -72,6 +72,7 @@ public class SocketHolder {
     private Object[][] serverCPEArrayConnectionWasInitializedWith;
     private byte[] clientCPEHandshake;
     private String username;
+    private Boolean CPEConnection;
     private int ticksNoNewDataFromServer;
     private GameServer pendingGameServer;
     private boolean connectingForTheFirstTime = true;
@@ -225,6 +226,14 @@ public class SocketHolder {
 
     public String getUsername() {
         return username;
+    }
+
+    public Boolean isCPEConnection() {
+        return CPEConnection;
+    }
+
+    public void setCPEConnection(boolean CPEConnection) {
+        this.CPEConnection = CPEConnection;
     }
 
     public void setUsername(String username) {

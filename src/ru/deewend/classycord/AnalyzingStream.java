@@ -6,7 +6,8 @@ import java.io.OutputStream;
 import java.util.*;
 
 public class AnalyzingStream extends OutputStream {
-    public static final String EXPECTED_MESSAGE_START = "/ccgoto ";
+    public static final String EXPECTED_MESSAGE_START =
+            ClassyCord.getInstance().getGotoCommandStart();
 
     private final SocketHolder holder;
     private long currentPos = Long.MIN_VALUE;

@@ -177,6 +177,9 @@ public class HandlerThread extends Thread {
             clientOutputStream.flush();
         }
         AnalyzingStream analyzingStream = holder.getAnalyzingStream();
+        analyzingStream.setServerMode(true);
+        analyzingStream.write(packet);
+        analyzingStream.setServerMode(false);
         if (analyzingStream.isRecording()) {
             byte[] cpeHandshake = analyzingStream.stopRecording();
             holder.setClientCPEHandshake(cpeHandshake);
@@ -308,7 +311,12 @@ public class HandlerThread extends Thread {
         if (t instanceof SilentIOException) {
             reason = t.getMessage();
         } else {
-            reason = "A disconnect or timeout occurred in your connection";
+            String disconnectMessage = holder.getAnalyzingStream().getDisconnectMessage();
+            if (disconnectMessage != null) {
+                reason = disconnectMessage;
+            } else {
+                reason = "A disconnect or timeout occurred in your connection";
+            }
         }
         // there is a chance it will mess up with another packet though
         Utils.sendDisconnect(holder, reason);

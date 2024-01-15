@@ -15,6 +15,9 @@ public class AnalyzingStream extends OutputStream {
     private final List<Long> keysToRemove = new ArrayList<>();
     private ByteArrayOutputStream recordedBytes;
     private boolean suppressingBytes;
+    private boolean serverMode;
+    private final byte[] last1KiBFromServer = new byte[1024];
+    private int last1KiBFromServerIdx;
 
     public AnalyzingStream(SocketHolder holder) {
         this.holder = holder;
@@ -22,6 +25,18 @@ public class AnalyzingStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
+        if (serverMode) {
+            if (last1KiBFromServerIdx != last1KiBFromServer.length) {
+                last1KiBFromServer[last1KiBFromServerIdx++] = (byte) b;
+            } else {
+                for (int i = 1; i < last1KiBFromServer.length; i++) {
+                    last1KiBFromServer[i - 1] = last1KiBFromServer[i];
+                }
+                last1KiBFromServer[last1KiBFromServer.length - 1] = (byte) b;
+            }
+
+            return;
+        }
         if (isRecording()) {
             recordedBytes.write(b);
         }
@@ -46,6 +61,10 @@ public class AnalyzingStream extends OutputStream {
             throw new IOException("currentPos reached its max value");
         }
         currentPos++;
+    }
+
+    public void setServerMode(boolean serverMode) {
+        this.serverMode = serverMode;
     }
 
     public void startSuppressing() {
@@ -73,6 +92,22 @@ public class AnalyzingStream extends OutputStream {
         recordedBytes = null;
 
         return recorded;
+    }
+
+    public String getDisconnectMessage() {
+        for (int i = last1KiBFromServer.length - 1; i >= 0; i--) {
+            if (last1KiBFromServer[i] == Utils.DISCONNECT_PACKET) {
+                byte[] reasonBytes = new byte[64];
+                System.arraycopy(last1KiBFromServer,
+                        i, reasonBytes, 0, reasonBytes.length);
+
+                return Utils.readMCString(reasonBytes);
+            }
+        }
+
+        System.out.println("No. " + Arrays.toString(last1KiBFromServer));
+        System.out.println(new String(last1KiBFromServer));
+        return null;
     }
 
     private void handleMessage(String message) {

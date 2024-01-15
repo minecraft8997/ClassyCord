@@ -87,7 +87,7 @@ public class Utils {
         return readMCString(buffer);
     }
 
-    public static String readMCString(byte[] buffer) throws IOException {
+    public static String readMCString(byte[] buffer) {
         int end = -1;
         for (int i = PROTOCOL_STRING_LENGTH - 1; i >= 0; i--) {
             if (buffer[i] != 0x20) {

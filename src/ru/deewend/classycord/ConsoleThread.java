@@ -36,30 +36,33 @@ public class ConsoleThread extends Thread {
         } else if (line.equalsIgnoreCase("info")) {
             ClassyCord.printVersionInfo(true);
             Log.i("");
-            int playersOnline = 0;
+            int players = 0;
+            int connections = 0;
             int maxCount = ClassyCord.getInstance().getMaxHandlerThreadCount();
             for (int i = 0; i < maxCount; i++) {
                 HandlerThread thread = ClassyCord.getInstance().getHandlerThreadAt(i);
                 if (thread == null) break;
 
                 Log.i("HandlerThread (i=" + i + ")");
-                int prevPlayersOnline = playersOnline;
+                int prevConnections = connections;
                 synchronized (thread) {
                     for (SocketHolder holder : thread.getClientList()) {
                         GameServer gameServer = holder.getGameServer();
                         Log.i(" - " + HandlerThread.getAddressAndUsername(holder) + " " +
                                 (gameServer == null ? "pending authentication" :
                                         "at gameServer=" + gameServer.getName()));
-                        playersOnline++;
+                        connections++;
+                        if (gameServer != null) players++;
                     }
                 }
-                if (playersOnline == prevPlayersOnline) {
+                if (connections == prevConnections) {
                     Log.i(" - No one is online");
                 }
             }
             Log.i("");
-            Log.i("Total online player count: " +
-                    playersOnline + "/" + ClassyCord.getInstance().getMaxPlayerCount());
+            int maxPlayerCount = ClassyCord.getInstance().getMaxPlayerCount();
+            Log.i("Total player count: " + players + "/" + maxPlayerCount);
+            Log.i("Total connection count: " + connections + "/" + maxPlayerCount);
         } else if (line.equalsIgnoreCase("exit")) {
             System.exit(0);
         } else {

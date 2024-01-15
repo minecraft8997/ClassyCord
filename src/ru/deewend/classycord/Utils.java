@@ -159,13 +159,15 @@ public class Utils {
     @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
     public static int getOnlinePlayerCount() {
         int playerCount = 0;
-        int maxCount = ClassyCord.getInstance().getMaxHandlerThreadCount();
-        for (int i = 0; i < maxCount; i++) {
+        int threadCount = ClassyCord.getInstance().getMaxHandlerThreadCount();
+        for (int i = 0; i < threadCount; i++) {
             HandlerThread thread = ClassyCord.getInstance().getHandlerThreadAt(i);
             if (thread == null) break;
 
             synchronized (thread) {
-                playerCount += thread.getClientList().size();
+                for (SocketHolder holder : thread.getClientList()) {
+                    if (holder.getUsername() != null) playerCount++;
+                }
             }
         }
 

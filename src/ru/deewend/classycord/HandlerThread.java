@@ -169,9 +169,14 @@ public class HandlerThread extends Thread {
     private void handleDataFromServer(
             SocketHolder holder, byte[] packet
     ) throws IOException, SilentIOException {
-        OutputStream clientOutputStream = holder.getOutputStream();
-        clientOutputStream.write(packet);
-        clientOutputStream.flush();
+        if (holder.connectingTwice && holder.getState() != SocketHolder.State.CONNECTED) {
+
+        } else {
+            OutputStream clientOutputStream = holder.getOutputStream();
+            clientOutputStream.write(packet);
+            clientOutputStream.flush();
+        }
+
 
         AnalyzingStream analyzingStream = holder.getAnalyzingStream();
         if (analyzingStream.isRecording()) {

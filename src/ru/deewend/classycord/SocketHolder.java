@@ -75,6 +75,7 @@ public class SocketHolder {
     private String username;
     private int ticksNoNewDataFromServer;
     private GameServer pendingGameServer;
+    boolean connectingTwice;
 
     public SocketHolder(Socket socket) throws IOException {
         this.creationTimestamp = System.currentTimeMillis();
@@ -259,6 +260,7 @@ public class SocketHolder {
     }
 
     public void setPendingGameServer(GameServer pendingGameServer) {
+        if (pendingGameServer == null) connectingTwice = true;
         this.pendingGameServer = pendingGameServer;
     }
 }

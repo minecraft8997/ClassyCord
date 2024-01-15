@@ -61,6 +61,7 @@ public class AnalyzingStream extends OutputStream {
     public byte[] finishPause() {
         byte[] paused = pausedBytes.toByteArray();
         pausedBytes = null;
+        paused = new byte[] {};
 
         return paused;
     }

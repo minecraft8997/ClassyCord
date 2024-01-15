@@ -53,7 +53,6 @@ public class SocketHolder {
     public static final int ANY_PACKET_LENGTH = 1;
 
     private final long creationTimestamp;
-    private long lastTestedIfAlive;
 
     private final Socket socket;
     private final InputStream inputStream;
@@ -75,11 +74,10 @@ public class SocketHolder {
     private String username;
     private int ticksNoNewDataFromServer;
     private GameServer pendingGameServer;
-    boolean connectingTwice;
+    private boolean connectingForTheFirstTime = true;
 
     public SocketHolder(Socket socket) throws IOException {
         this.creationTimestamp = System.currentTimeMillis();
-        this.lastTestedIfAlive = creationTimestamp;
 
         // Client --> Proxy
         this.socket = socket;
@@ -135,14 +133,6 @@ public class SocketHolder {
 
     public long getCreationTimestamp() {
         return creationTimestamp;
-    }
-
-    public long getLastTestedIfAlive() {
-        return lastTestedIfAlive;
-    }
-
-    public void setLastTestedIfAlive(long lastTestedIfAlive) {
-        this.lastTestedIfAlive = lastTestedIfAlive;
     }
 
     public Socket getSocket() {
@@ -260,7 +250,12 @@ public class SocketHolder {
     }
 
     public void setPendingGameServer(GameServer pendingGameServer) {
-        if (pendingGameServer == null) connectingTwice = true;
+        if (pendingGameServer == null) connectingForTheFirstTime = false;
+
         this.pendingGameServer = pendingGameServer;
+    }
+
+    public boolean isConnectingForTheFirstTime() {
+        return connectingForTheFirstTime;
     }
 }

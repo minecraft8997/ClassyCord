@@ -122,7 +122,7 @@ public class HandlerThread extends Thread {
         SocketHolder.State state = holder.getState();
         if (state != SocketHolder.State.WAITING_FOR_PLAYER_IDENTIFICATION) {
             AnalyzingStream analyzingStream = holder.getAnalyzingStream();
-            if (!analyzingStream.isPaused()) {
+            if (!analyzingStream.isSuppressing()) {
                 OutputStream serverOutputStream = holder.getServerOutputStream();
                 serverOutputStream.write(packet);
                 serverOutputStream.flush();
@@ -169,22 +169,19 @@ public class HandlerThread extends Thread {
     private void handleDataFromServer(
             SocketHolder holder, byte[] packet
     ) throws IOException, SilentIOException {
-        if (holder.connectingTwice && holder.getState() != SocketHolder.State.CONNECTED) {
+        SocketHolder.State state = holder.getState();
 
-        } else {
+        if (holder.isConnectingForTheFirstTime() || state == SocketHolder.State.CONNECTED) {
             OutputStream clientOutputStream = holder.getOutputStream();
             clientOutputStream.write(packet);
             clientOutputStream.flush();
         }
-
-
         AnalyzingStream analyzingStream = holder.getAnalyzingStream();
         if (analyzingStream.isRecording()) {
             byte[] cpeHandshake = analyzingStream.stopRecording();
             holder.setClientCPEHandshake(cpeHandshake);
         }
 
-        SocketHolder.State state = holder.getState();
         if (state == SocketHolder.State.CONNECTED) return;
 
         ByteArrayInputStream stream0 = new ByteArrayInputStream(packet);
@@ -253,9 +250,7 @@ public class HandlerThread extends Thread {
                     byte[] clientCPEHandshake = holder.getClientCPEHandshake();
                     OutputStream serverOutputStream = holder.getServerOutputStream();
                     serverOutputStream.write(clientCPEHandshake);
-                    byte[] pausedBytes = analyzingStream.finishPause();
-                    serverOutputStream.write(pausedBytes);
-
+                    analyzingStream.finishSuppressing();
                     serverOutputStream.flush();
                 } else {
                     holder.setServerCPEArrayConnectionWasInitializedWith(CPEArray);

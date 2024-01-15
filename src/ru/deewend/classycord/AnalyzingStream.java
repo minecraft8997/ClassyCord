@@ -13,7 +13,7 @@ public class AnalyzingStream extends OutputStream {
     private final Map<Long, byte[]> map = new HashMap<>();
     private final List<Long> keysToRemove = new ArrayList<>();
     private ByteArrayOutputStream recordedBytes;
-    private ByteArrayOutputStream pausedBytes;
+    private boolean suppressingBytes;
 
     public AnalyzingStream(SocketHolder holder) {
         this.holder = holder;
@@ -23,9 +23,6 @@ public class AnalyzingStream extends OutputStream {
     public void write(int b) throws IOException {
         if (isRecording()) {
             recordedBytes.write(b);
-        }
-        if (isPaused()) {
-            pausedBytes.write(b);
         }
         if (b == Utils.MESSAGE_PACKET) {
             map.put(currentPos, new byte[Utils.PROTOCOL_STRING_LENGTH]);
@@ -50,20 +47,16 @@ public class AnalyzingStream extends OutputStream {
         currentPos++;
     }
 
-    public void pause() {
-        pausedBytes = new ByteArrayOutputStream();
+    public void startSuppressing() {
+        suppressingBytes = true;
     }
 
-    public boolean isPaused() {
-        return pausedBytes != null;
+    public boolean isSuppressing() {
+        return suppressingBytes;
     }
 
-    public byte[] finishPause() {
-        byte[] paused = pausedBytes.toByteArray();
-        pausedBytes = null;
-        paused = new byte[] {};
-
-        return paused;
+    public void finishSuppressing() {
+        suppressingBytes = false;
     }
 
     public void startRecording() {
@@ -91,7 +84,7 @@ public class AnalyzingStream extends OutputStream {
             if (gameServer == null || holder.getGameServer() == gameServer) return;
 
             holder.setPendingGameServer(gameServer);
-            pause();
+            startSuppressing();
         }
     }
 }

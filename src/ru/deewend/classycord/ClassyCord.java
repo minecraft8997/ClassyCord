@@ -6,8 +6,8 @@ import java.net.Socket;
 import java.util.*;
 
 public class ClassyCord {
-    public static final String VERSION = "0.9.4";
-    public static final int VERSION_CODE = 4;
+    public static final String VERSION = "0.9.5";
+    public static final int VERSION_CODE = 5;
     public static final boolean DEBUG = Boolean
             .parseBoolean(System.getProperty("ccdebug", "false"));
 
@@ -29,6 +29,7 @@ public class ClassyCord {
     private final long exceptionMapStorageTimeoutMillis;
     private final int minTicksToWaitBeforeReconnecting;
     private final String gotoCommandStart;
+    private final boolean fireTickEvent;
     private final GameServer firstServer;
     private final int maxPlayerCount;
     private final Map<String, GameServer> gameServerMap = new HashMap<>();
@@ -51,6 +52,7 @@ public class ClassyCord {
             long exceptionMapStorageTimeoutMillis,
             int minTicksToWaitBeforeReconnecting,
             String gotoCommandStart,
+            boolean fireTickEvent,
             GameServer firstServer,
             GameServer... gameServers
     ) {
@@ -89,6 +91,7 @@ public class ClassyCord {
         this.exceptionMapStorageTimeoutMillis = exceptionMapStorageTimeoutMillis;
         this.minTicksToWaitBeforeReconnecting = minTicksToWaitBeforeReconnecting;
         this.gotoCommandStart = gotoCommandStart;
+        this.fireTickEvent = fireTickEvent;
 
         this.firstServer = firstServer;
         this.maxPlayerCount = maxHandlerThreadCount * maxConnectionsCountPerHandlerThread;
@@ -134,6 +137,7 @@ public class ClassyCord {
         props.setProperty("exceptionMapStorageTimeoutMillis", "900000");
         props.setProperty("minTicksToWaitBeforeReconnecting", "2");
         props.setProperty("gotoCommandStart", "/ccgoto ");
+        props.setProperty("fireTickEvent", "false");
         props.setProperty("serverCount", "1");
         props.setProperty("server1Name", "Freebuild");
         props.setProperty("server1Address", "127.0.0.1");
@@ -191,6 +195,8 @@ public class ClassyCord {
         int minTicksToWaitBeforeReconnecting = Integer.parseInt(
                 props.getProperty("minTicksToWaitBeforeReconnecting"));
         String gotoCommandStart = props.getProperty("gotoCommandStart");
+        boolean fireTickEvent = Boolean.parseBoolean(
+                props.getProperty("fireTickEvent"));
 
         int port = Integer.parseInt(props.getProperty("port"));
         String salt = props.getProperty("salt");
@@ -242,6 +248,7 @@ public class ClassyCord {
                 exceptionMapStorageTimeoutMillis,
                 minTicksToWaitBeforeReconnecting,
                 gotoCommandStart,
+                fireTickEvent,
                 firstServer,
                 gameServers
         )).start();
@@ -297,7 +304,7 @@ public class ClassyCord {
     }
 
     private void startHandlerThreadAt(int i) {
-        handlerThreads[i] = new HandlerThread();
+        handlerThreads[i] = new HandlerThread(i);
         handlerThreads[i].start();
     }
 
@@ -380,6 +387,10 @@ public class ClassyCord {
 
     public String getGotoCommandStart() {
         return gotoCommandStart;
+    }
+
+    public boolean shouldFireTickEvent() {
+        return fireTickEvent;
     }
 
     public GameServer getFirstServer() {

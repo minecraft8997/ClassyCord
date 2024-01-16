@@ -19,10 +19,13 @@ public class HandlerThread extends Thread {
     private final List<SocketHolder> clientList = new ArrayList<>();
     private final List<String> keysToRemove = new ArrayList<>();
     private final Map<String, Pair<GameServer, Long>> exceptionMap = new HashMap<>();
+    private final int index;
 
-    public HandlerThread() {
-        setName("handler");
+    public HandlerThread(int index) {
+        setName("handler (i=" + index + ")");
         setDaemon(true);
+
+        this.index = index;
     }
 
     public static String getAddressAndUsername(SocketHolder holder) {
@@ -42,6 +45,10 @@ public class HandlerThread extends Thread {
     }
 
     private synchronized void tick() {
+        if (ClassyCord.getInstance().shouldFireTickEvent()) {
+            EventManager.getInstance().fireEvent(new HandlerThreadTickEvent(this));
+        }
+
         int clientListSize = clientList.size();
         global: for (int i = clientListSize - 1; i >= 0; i--) {
             SocketHolder holder = clientList.get(i);
@@ -332,5 +339,9 @@ public class HandlerThread extends Thread {
 
     List<SocketHolder> getClientList() {
         return clientList;
+    }
+
+    public int getIndex() {
+        return index;
     }
 }

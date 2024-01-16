@@ -6,7 +6,8 @@ import java.net.Socket;
 import java.util.*;
 
 public class ClassyCord {
-    public static final String VERSION = "0.9.3";
+    public static final String VERSION = "0.9.4";
+    public static final int VERSION_CODE = 4;
     public static final boolean DEBUG = Boolean
             .parseBoolean(System.getProperty("ccdebug", "false"));
 
@@ -261,6 +262,9 @@ public class ClassyCord {
     public void start() throws IOException {
         (new ConsoleThread()).start();
         if (onlineMode) (new HeartbeatThread()).start();
+
+        PluginManager.getInstance().loadPlugins();
+        PluginManager.getInstance().enablePlugins();
 
         try (ServerSocket listeningSocket = new ServerSocket(port)) {
             startHandlerThreadAt(0);

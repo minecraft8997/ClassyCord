@@ -110,7 +110,7 @@ public class HandlerThread extends Thread {
                         break;
                     }
                 }
-            } catch (IOException | SilentIOException e) {
+            } catch (Exception | SilentIOException e) {
                 close(holder, e);
             }
         }
@@ -311,7 +311,7 @@ public class HandlerThread extends Thread {
         if (t instanceof SilentIOException) {
             reason = t.getMessage();
         } else {
-            String disconnectMessage = holder.getAnalyzingStream().getDisconnectMessage();
+            String disconnectMessage = holder.getAnalyzingStream().findDisconnectMessage();
             if (disconnectMessage != null) {
                 reason = disconnectMessage;
             } else {

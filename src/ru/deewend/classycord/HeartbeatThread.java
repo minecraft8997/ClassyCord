@@ -28,6 +28,7 @@ public class HeartbeatThread extends Thread {
             requestUrl += "&max=" + ClassyCord.getInstance().getMaxPlayerCount();
             requestUrl += "&salt=" + ClassyCord.getInstance().getSalt();
             requestUrl += "&public=" + ClassyCord.getInstance().isPublicServer();
+            requestUrl += "&software=ClassyCord " + ClassyCord.VERSION;
 
             try {
                 HttpURLConnection connection =

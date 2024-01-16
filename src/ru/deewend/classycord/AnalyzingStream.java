@@ -94,7 +94,7 @@ public class AnalyzingStream extends OutputStream {
         return recorded;
     }
 
-    public String getDisconnectMessage() {
+    public String findDisconnectMessage() {
         for (int i = last1KiBFromServer.length - 1; i >= 0; i--) {
             if (last1KiBFromServer[i] == Utils.DISCONNECT_PACKET) {
                 byte[] reasonBytes = new byte[64];
@@ -105,8 +105,6 @@ public class AnalyzingStream extends OutputStream {
             }
         }
 
-        System.out.println("No. " + Arrays.toString(last1KiBFromServer));
-        System.out.println(new String(last1KiBFromServer));
         return null;
     }
 

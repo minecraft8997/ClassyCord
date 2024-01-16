@@ -156,6 +156,20 @@ public class Utils {
         return String.format("%032x", new BigInteger(1, md5.digest()));
     }
 
+    public static File[] listPlugins() {
+        File pluginsDir = new File("./plugins/");
+        if (!pluginsDir.isDirectory()) {
+            if (!pluginsDir.mkdir()) {
+                Log.w("Failed to create plugins directory");
+
+                return null;
+            }
+            Log.i("Created plugins directory");
+        }
+
+        return pluginsDir.listFiles(file -> file.getName().endsWith(".jar"));
+    }
+
     @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
     public static int getOnlinePlayerCount() {
         int playerCount = 0;

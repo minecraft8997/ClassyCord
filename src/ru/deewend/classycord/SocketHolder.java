@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class SocketHolder {
@@ -52,6 +54,7 @@ public class SocketHolder {
     public static final int ANY_PACKET_ID = -1;
     public static final int ANY_PACKET_LENGTH = 1;
 
+    private final HandlerThread thread;
     private final long creationTimestamp;
 
     private final Socket socket;
@@ -66,8 +69,9 @@ public class SocketHolder {
     private OutputStream serverOutputStream;
     private long lastServerReadTimestamp;
 
+    private final Map<Object, Object> metadata = new HashMap<>();
     private State state = State.WAITING_FOR_PLAYER_IDENTIFICATION;
-    private boolean supportsCPE;
+    private boolean clientSupportsCPE;
     private short expectedServerExtEntryCount;
     private Object[][] serverCPEArrayConnectionWasInitializedWith;
     private byte[] clientCPEHandshake;
@@ -77,8 +81,9 @@ public class SocketHolder {
     private GameServer pendingGameServer;
     private boolean connectingForTheFirstTime = true;
 
-    public SocketHolder(Socket socket) throws IOException {
+    public SocketHolder(HandlerThread thread, Socket socket) throws IOException {
         this.creationTimestamp = System.currentTimeMillis();
+        this.thread = thread;
 
         // Client --> Proxy
         this.socket = socket;
@@ -90,45 +95,53 @@ public class SocketHolder {
 
     public void setGameServer(GameServer gameServer) throws IOException {
         Objects.requireNonNull(gameServer);
-        if (username == null) {
-            throw new IllegalStateException("Cannot connect " +
-                    "to a GameServer without knowing the player's username");
-        }
-        Log.i((this.gameServer == gameServer ? "Rec" : "C") +
-                "onnecting " + username + " to " + gameServer.getName());
 
-        this.gameServer = gameServer;
-        Utils.close(serverSocket);
+        synchronized (thread) {
+            if (username == null) {
+                throw new IllegalStateException("Cannot connect " +
+                        "to a GameServer without knowing the player's username");
+            }
+            Log.i((this.gameServer == gameServer ? "Rec" : "C") +
+                    "onnecting " + username + " to " + gameServer.getName());
 
-        // Proxy --> Game Server
-        serverSocket = new Socket(gameServer.getAddress(), gameServer.getPort());
-        serverSocket.setTcpNoDelay(true);
-        serverInputStream = serverSocket.getInputStream();
-        serverOutputStream = serverSocket.getOutputStream();
-        lastServerReadTimestamp = System.currentTimeMillis();
+            this.gameServer = gameServer;
+            Utils.close(serverSocket);
 
-        // writing PlayerIdentification packet
-        serverOutputStream.write(Utils.SIDE_IDENTIFICATION_PACKET);
-        serverOutputStream.write(Utils.PROTOCOL_VERSION);
-        Utils.writeMCString(username, serverOutputStream);
-        String verificationKey = Utils.md5(ClassyCord.getInstance().getSalt() + username);
-        Utils.writeMCString(verificationKey, serverOutputStream);
-        serverOutputStream.write(supportsCPE ? Utils.MAGIC : 0x00);
-        serverOutputStream.flush();
+            // Proxy --> Game Server
+            serverSocket = new Socket(gameServer.getAddress(), gameServer.getPort());
+            serverSocket.setTcpNoDelay(true);
+            serverInputStream = serverSocket.getInputStream();
+            serverOutputStream = serverSocket.getOutputStream();
+            lastServerReadTimestamp = System.currentTimeMillis();
 
-        if (supportsCPE) {
-            setState(SocketHolder.State.WAITING_FOR_SERVER_EXT_INFO_PT_1);
-        } else {
-            setState(SocketHolder.State.CONNECTED);
+            // writing PlayerIdentification packet
+            serverOutputStream.write(Utils.SIDE_IDENTIFICATION_PACKET);
+            serverOutputStream.write(Utils.PROTOCOL_VERSION);
+            Utils.writeMCString(username, serverOutputStream);
+            String verificationKey = Utils.md5(ClassyCord.getInstance().getSalt() + username);
+            Utils.writeMCString(verificationKey, serverOutputStream);
+            serverOutputStream.write(clientSupportsCPE ? Utils.MAGIC : 0x00);
+            serverOutputStream.flush();
+
+            if (clientSupportsCPE) {
+                setState(SocketHolder.State.WAITING_FOR_SERVER_EXT_INFO_PT_1);
+            } else {
+                setState(SocketHolder.State.CONNECTED);
+            }
+
+            EventManager.getInstance().fireEvent(
+                    new HandlerThread.GameServerSetEvent(thread, this, gameServer));
         }
     }
 
     public int getExpectedServerPacketLength() {
-        switch (state) {
-            case WAITING_FOR_SERVER_EXT_INFO_PT_1: return 65;
-            case WAITING_FOR_SERVER_EXT_INFO_PT_2: return 2; /* only one short is remaining */
-            case WAITING_FOR_ALL_SERVER_EXT_ENTRIES: return expectedServerExtEntryCount * 69;
-            default: return ANY_PACKET_LENGTH;
+        synchronized (thread) {
+            switch (state) {
+                case WAITING_FOR_SERVER_EXT_INFO_PT_1: return 65;
+                case WAITING_FOR_SERVER_EXT_INFO_PT_2: return 2; /* only one short is remaining */
+                case WAITING_FOR_ALL_SERVER_EXT_ENTRIES: return expectedServerExtEntryCount * 69;
+                default: return ANY_PACKET_LENGTH;
+            }
         }
     }
 
@@ -157,7 +170,9 @@ public class SocketHolder {
     }
 
     public void setLastReadTimestamp(long lastReadTimestamp) {
-        this.lastReadTimestamp = lastReadTimestamp;
+        synchronized (thread) {
+            this.lastReadTimestamp = lastReadTimestamp;
+        }
     }
 
     public GameServer getGameServer() {
@@ -181,7 +196,9 @@ public class SocketHolder {
     }
 
     public void setLastServerReadTimestamp(long lastServerReadTimestamp) {
-        this.lastServerReadTimestamp = lastServerReadTimestamp;
+        synchronized (thread) {
+            this.lastServerReadTimestamp = lastServerReadTimestamp;
+        }
     }
 
     public State getState() {
@@ -189,15 +206,19 @@ public class SocketHolder {
     }
 
     public void setState(State state) {
-        this.state = state;
+        synchronized (thread) {
+            this.state = state;
+        }
     }
 
     public boolean doesSupportCPE() {
-        return supportsCPE;
+        return clientSupportsCPE;
     }
 
-    public void setSupportsCPE(boolean supportsCPE) {
-        this.supportsCPE = supportsCPE;
+    public void setClientSupportsCPE(boolean clientSupportsCPE) {
+        synchronized (thread) {
+            this.clientSupportsCPE = clientSupportsCPE;
+        }
     }
 
     public short getExpectedServerExtEntryCount() {
@@ -205,7 +226,9 @@ public class SocketHolder {
     }
 
     public void setExpectedServerExtEntryCount(short expectedServerExtEntryCount) {
-        this.expectedServerExtEntryCount = expectedServerExtEntryCount;
+        synchronized (thread) {
+            this.expectedServerExtEntryCount = expectedServerExtEntryCount;
+        }
     }
 
     public Object[][] getServerCPEArrayConnectionWasInitializedWith() {
@@ -213,7 +236,9 @@ public class SocketHolder {
     }
 
     public void setServerCPEArrayConnectionWasInitializedWith(Object[][] CPEArray) {
-        this.serverCPEArrayConnectionWasInitializedWith = CPEArray;
+        synchronized (thread) {
+            this.serverCPEArrayConnectionWasInitializedWith = CPEArray;
+        }
     }
 
     public byte[] getClientCPEHandshake() {
@@ -221,7 +246,9 @@ public class SocketHolder {
     }
 
     public void setClientCPEHandshake(byte[] clientCPEHandshake) {
-        this.clientCPEHandshake = clientCPEHandshake;
+        synchronized (thread) {
+            this.clientCPEHandshake = clientCPEHandshake;
+        }
     }
 
     public String getUsername() {
@@ -233,13 +260,17 @@ public class SocketHolder {
     }
 
     public void setCPEConnection(boolean CPEConnection) {
-        this.CPEConnection = CPEConnection;
+        synchronized (thread) {
+            this.CPEConnection = CPEConnection;
+        }
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        synchronized (thread) {
+            this.username = username;
 
-        Log.i(Utils.getAddress(socket) + " logged in as " + username);
+            Log.i(Utils.getAddress(socket) + " logged in as " + username);
+        }
     }
 
     public int getTicksNoNewDataFromServer() {
@@ -247,11 +278,15 @@ public class SocketHolder {
     }
 
     public void incrementTicksNoNewDataFromServer() {
-        this.ticksNoNewDataFromServer++;
+        synchronized (thread) {
+            this.ticksNoNewDataFromServer++;
+        }
     }
 
     public void resetTicksNoNewDataFromServer() {
-        this.ticksNoNewDataFromServer = 0;
+        synchronized (thread) {
+            this.ticksNoNewDataFromServer = 0;
+        }
     }
 
     public GameServer getPendingGameServer() {
@@ -259,12 +294,26 @@ public class SocketHolder {
     }
 
     public void setPendingGameServer(GameServer pendingGameServer) {
-        if (pendingGameServer == null) connectingForTheFirstTime = false;
+        synchronized (thread) {
+            if (pendingGameServer == null) connectingForTheFirstTime = false;
 
-        this.pendingGameServer = pendingGameServer;
+            this.pendingGameServer = pendingGameServer;
+        }
     }
 
     public boolean isConnectingForTheFirstTime() {
         return connectingForTheFirstTime;
+    }
+
+    public synchronized void putMetadata(Object key, Object value) {
+        metadata.put(key, value);
+    }
+
+    public synchronized boolean hasMetadata(Object key) {
+        return metadata.containsKey(key);
+    }
+
+    public synchronized Object getMetadata(Object key) {
+        return metadata.get(key);
     }
 }

@@ -32,7 +32,7 @@ public class EventManager {
 
         if (ClassyCord.DEBUG) {
             if ("true".equalsIgnoreCase(System.getProperty("ccDontDebugTickEvent"))) {
-                if (event.getClass() == HandlerThreadTickEvent.class) return;
+                if (event.getClass() == HandlerThread.TickEvent.class) return;
             }
             Log.i("Firing event " + event.getClass().getName());
         }

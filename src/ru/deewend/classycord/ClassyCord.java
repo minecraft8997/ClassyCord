@@ -6,8 +6,8 @@ import java.net.Socket;
 import java.util.*;
 
 public class ClassyCord {
-    public static final String VERSION = "0.9.5";
-    public static final int VERSION_CODE = 5;
+    public static final String VERSION = "0.9.6";
+    public static final int VERSION_CODE = 6;
     public static final boolean DEBUG = Boolean
             .parseBoolean(System.getProperty("ccdebug", "false"));
 
